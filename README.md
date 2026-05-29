@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Outlands Multi Tracker v0.1
 **by Daping**
 
@@ -66,3 +67,6 @@ Puis recompile avec `build.bat`.
   }
 ]
 ```
+=======
+# Outlands Multi Tracker
+>>>>>>> 8f7aa164b9dd0389e41cb3708433695cf3d615d4
