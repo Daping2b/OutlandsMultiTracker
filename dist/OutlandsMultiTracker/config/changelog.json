@@ -1,0 +1,78 @@
+[
+  {
+    "version": "0.43",
+    "date": "2026-05-29",
+    "author": "Daping",
+    "changes": [
+      "Fixed auto-update — now uses external script to replace exe while closed",
+      "Users on v0.41/v0.42 can now update successfully",
+      "Wilderness section active — Global shows sessions outside known dungeons",
+      "Removed Coming Soon from Wilderness tree"
+    ]
+  },
+  {
+    "version": "0.42",
+    "date": "2026-05-28",
+    "author": "Daping",
+    "changes": [
+      "Fixed crash on startup — missing _show_splash method definition",
+      "Auto-update system now fully operational"
+    ]
+  },
+  {
+    "version": "0.41",
+    "date": "2026-05-28",
+    "author": "Daping",
+    "changes": [
+      "Added automatic update system via GitHub Releases",
+      "Update downloads and installs silently with progress bar",
+      "User data (sessions, XP, settings) preserved during updates",
+      "App relaunches automatically after update"
+    ]
+  },
+  {
+    "version": "0.4",
+    "date": "2026-05-28",
+    "author": "Daping",
+    "changes": [
+      "Fixed taskbar icon — now shows O-MT logo instead of blue square",
+      "Fixed News panel on Home page — no longer cut off vertically",
+      "Fixed column header height in Log Analysis",
+      "Fixed Experience All Time button — triggers immediately",
+      "Fixed aspect colors — extracted from in-game core images",
+      "Fixed space between expanded session panels and next row",
+      "Added sortable columns with UO icons in Log Analysis",
+      "Added splash screen on startup",
+      "Added column separators in header",
+      "Updated font sizes across the app"
+    ]
+  },
+  {
+    "version": "0.3",
+    "date": "2026-05-28",
+    "author": "Daping",
+    "changes": [
+      "Fixed image loading for all logos",
+      "Fixed dungeon tree — fully expandable with levels",
+      "Fixed session type column — shows dungeon name directly",
+      "Removed system tray — app closes normally",
+      "Loading screen with real-time file progress",
+      "Added All Time button next to date filters",
+      "Added Delete sessions button",
+      "Added Settings page with reset",
+      "Added UO icons on nav buttons and columns"
+    ]
+  },
+  {
+    "version": "0.1",
+    "date": "2026-05-27",
+    "author": "Daping",
+    "changes": [
+      "Initial release of Outlands Multi Tracker",
+      "Log Analysis with session detection and loot categorization",
+      "Experience tab with monthly/daily/hourly XP chart",
+      "How To tab with Razor scripts",
+      "Multi-character support and date range filtering"
+    ]
+  }
+]

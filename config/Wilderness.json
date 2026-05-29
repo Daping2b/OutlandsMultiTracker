@@ -1,0 +1,15 @@
+{
+  "wilderness": [
+    {
+      "id": "example_zone1",
+      "name": "Example Zone Name",
+      "priority": 1,
+      "polygon": [
+        [0, 0],
+        [100, 0],
+        [100, 100],
+        [0, 100]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+##################################################
+### -= Outlands Multi Tracker by Daping 0.1 =- ###
+##################################################
+################## ▶▶▶ START ▶▶▶ #################
+##################################################
+########## VARIABLES ##########
+unsetvar! 'Harvesting'
+unsetvar! 'Boating'
+if skill "Lumberjacking" >= 50 or skill "Mining" >= 50
+    if findtype 3908|3718 backpack
+        @setvar! Harvest 1
+    endif
+endif
+    
+if findtype "tillerman|tiller man" 'ground' -1 -1 10 or findtype "status bar" 'ground' -1 -1 10
+        @setvar! Boating 1
+endif
+########## SCRIPT ##########
+overhead '═ RECORDING ▶ ═' 63
+sysmsg '═ SESSION : RECORD'
+if Harvest = 1
+        overhead 'Harvesting Session' 79
+        sysmsg '◆ Harvest Session'
+        stop
+endif        
+if Boating = 1        
+        overhead 'Boating Session' 6
+        sysmsg '◆ Boating Session'
+        stop
+endif
+if not varexist 'Harvest' and not varexist 'Boating'
+        overhead 'Creature Farming Session' 34
+        sysmsg '◆ Creature Farming Session'
+        say '[coords'
+        stop
+endif
+########## CLEAR ##########
+unsetvar! 'Harvesting'
+unsetvar! 'Boating'

@@ -1,0 +1,63 @@
+{
+  "sections": [
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "icon": "⚔",
+      "type": "bullets",
+      "items": [
+        "ClassicUO + Razor macro client installed and running",
+        "A Loot Bag configured (see below)",
+        "The two Razor scripts provided below"
+      ]
+    },
+    {
+      "id": "loot_bag",
+      "title": "Loot Bag Setup",
+      "icon": "🎒",
+      "type": "mixed",
+      "intro": "You only need one of the following containers:",
+      "items": [
+        "Pouch — in your backpack",
+        "Wooden Box — in your backpack (keep a Copper Key for auto-unlock)",
+        "Shipping Crate — on the ground within 2 tiles of your character"
+      ],
+      "outro": "All loot you want tracked must be inside one of these when you run the END script."
+    },
+    {
+      "id": "how_it_works",
+      "title": "How It Works",
+      "icon": "📖",
+      "type": "bullets",
+      "items": [
+        "Run the START script before heading out — auto-detects Harvesting, Boating or Creature Farming",
+        "Farm as normal",
+        "Return to your bank room with your loot bag full, then run the END script",
+        "Click LOAD LOGS in the app — all sessions appear automatically",
+        "Dungeons are detected automatically from your in-game coordinates (no manual input needed)"
+      ]
+    },
+    {
+      "id": "tips",
+      "title": "Tips & Tricks",
+      "icon": "💡",
+      "type": "bullets",
+      "items": [
+        "Always run the END script from your bank room",
+        "Keep a Copper Key in your backpack when using a Wooden Box as your loot bag",
+        "Multiple characters are fully supported — each gets its own tab",
+        "Use the date range calendar filters to focus on specific farming periods",
+        "Select multiple sessions with the checkboxes to export or share them together",
+        "The version number can be changed in config/version.json without recompiling",
+        "The changelog on the Home page is editable in config/changelog.json",
+        "Dungeon polygons can be updated in config/Dungeon.json — no recompile needed",
+        "All How To text is editable in config/howto_content.json"
+      ]
+    }
+  ],
+  "special_thanks": {
+    "main": "Thank you for using this program, made with all my heart\n(ok with [LDS]Striker & [LDS]Jane Savage too...)",
+    "thanks": "Thanks to all the testers who gave their time to help improve this tool.",
+    "contact": "If you have any problem or suggestion, feel free to contact me on Discord:  Daping"
+  }
+}
