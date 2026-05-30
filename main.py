@@ -622,6 +622,7 @@ class App(ctk.CTk):
             except: pass
         else:
             threading.Thread(target=self._check_update, daemon=True).start()
+        threading.Thread(target=self._fetch_bonuses, daemon=True).start()
     # ── Serialise ──────────────────────────────────────────────────────────────
     def _ser_sess(self,ss):
         out=[]

@@ -2,8 +2,8 @@ name: Fetch Weekly Region Bonuses
 
 on:
   schedule:
-    - cron: '5 0 * * 6'     # Every Saturday 2:05 AM UTC+2 (= 0:05 UTC)
-    - cron: '*/5 0-2 * * 6' # Retry every 5 min until 4:00 AM UTC+2 if not found
+    - cron: '5 0 * * 6'
+    - cron: '*/5 0-2 * * 6'
   workflow_dispatch:
 
 jobs:
@@ -36,7 +36,6 @@ jobs:
           channel_id = os.environ["CHANNEL_ID"]
           headers    = {"Authorization": token, "User-Agent": "OMT-BonusFetcher/1.0"}
 
-          # Load existing bonuses
           bonuses_path = "config/bonuses.json"
           try:
               with open(bonuses_path) as f:
@@ -45,11 +44,9 @@ jobs:
               bonuses = {}
 
           def get_week_key(dt):
-              """Get Saturday-based week key."""
               days_since_sat = (dt.weekday() + 2) % 7
               return (dt - timedelta(days=days_since_sat)).strftime("%Y-%m-%d")
 
-          # Fetch last 100 messages to rebuild full history
           url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=100"
           r = requests.get(url, headers=headers)
           if r.status_code != 200:
@@ -80,7 +77,6 @@ jobs:
               if "Regional Bonuses" not in content and "regional bonuses" not in content.lower():
                   continue
 
-              # Get message timestamp for week key
               ts_str = msg.get("timestamp","")
               try:
                   ts = datetime.fromisoformat(ts_str.replace("Z","+00:00"))
@@ -92,7 +88,6 @@ jobs:
                   print(f"Week {week_key} already in bonuses, skipping")
                   continue
 
-              # Parse bonuses
               lines = [l.strip() for l in content.split("\n") if l.strip()]
               week_bonuses = {}
               i = 0
@@ -121,13 +116,12 @@ jobs:
 
           if new_entries == 0:
               print("No new bonus entries found")
-              # Check if current week is missing — exit with error to trigger retry
               now = datetime.utcnow()
               current_week = get_week_key(now)
               if current_week not in bonuses:
                   print(f"Current week {current_week} still missing — will retry")
                   sys.exit(1)
-          
+
           with open(bonuses_path, "w") as f:
               json.dump(bonuses, f, indent=2, ensure_ascii=False)
           print(f"Saved bonuses.json with {len(bonuses)} weeks")

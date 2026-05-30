@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.53",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "IMPROVEMENT": [
+        "Bonus data is now automatically fetched from GitHub at startup to ensure weekly bonuses are always up to date"
+      ]
+    }
+  },
+  {
     "version": "0.52",
     "date": "2026-05-30",
     "author": "Daping",
