@@ -746,6 +746,16 @@ class App(ctk.CTk):
         "gold_loot":  "bonus_gold_loot.png",
         "experience": "bonus_experience.png",
     }
+    BONUS_SYMBOLS = {
+        "sanctuary":  "🛡️",
+        "challenger": "💀",
+        "respawn":    "⚡",
+        "gold_loot":  "💰",
+        "experience": "⭐",
+        "vendor":     "🪙",
+        "crafting":   "🔨",
+        "unknown":    "⭐",
+    }
     BONUS_LABELS = {
         "sanctuary":  "Sanctuary Dungeon",
         "challenger": "Challenger Dungeon",
@@ -1114,9 +1124,9 @@ class App(ctk.CTk):
                         self._tree_bonus_photos[btype] = ph
             # Store bonus info for tooltips
             self._tree_bonus_map = {}  # iid -> (label, value)
-            tv.insert("","end",iid="All",        text="  ◆  All")
+            tv.insert("","end",iid="All",        text="   ◆   All")
             tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
-            tv.insert("","end",iid="Harvesting", text="  🌲  Harvesting")
+            tv.insert("","end",iid="Harvesting", text="  ⛏  Harvesting")
             dn = tv.insert("","end",iid="Dungeon", text="  ⚔  Dungeon", open=False)
             current_bonuses = self._get_current_bonuses()
             seen = {}
@@ -1128,13 +1138,12 @@ class App(ctk.CTk):
                     for k,v in current_bonuses.items():
                         if k.lower() in base.lower() or base.lower() in k.lower():
                             bonus = v; break
-                    btype = bonus.get("type","") if bonus else ""
-                    img   = self._tree_bonus_photos.get(btype) if btype else None
-                    iid   = f"db_{base}"
-                    # image= in tv.insert on #0 column works on Windows — unlike tag_configure
+                    btype  = bonus.get("type","") if bonus else ""
+                    symbol = self.BONUS_SYMBOLS.get(btype, "⭐") if bonus else ""
+                    prefix = f"{symbol} " if symbol else "   "
+                    iid    = f"db_{base}"
                     seen[base] = tv.insert(dn,"end",iid=iid,
-                                           text=f"   {base}",
-                                           image=img if img else "",
+                                           text=f"{prefix}{base}",
                                            open=False)
                     if bonus:
                         self._tree_bonus_map[iid] = (bonus.get("label",""), bonus.get("value",""))

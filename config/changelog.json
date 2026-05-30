@@ -4,9 +4,12 @@
     "date": "2026-05-30",
     "author": "Daping",
     "changes": {
+      "IMPROVEMENT": [
+        "Activities tree now shows a unique symbol per bonus type next to dungeon names, with tooltip on hover"
+      ],
       "BUG FIX": [
-        "Bonus icons now display correctly in the Activities tree with tooltip on hover",
-        "App relaunches much faster after an auto-update"
+        "Fixed alignment of All and Harvesting icons in the Activities tree",
+        "App relaunches faster after auto-update"
       ]
     }
   },
