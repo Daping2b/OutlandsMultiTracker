@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.spec.bak
+
+# User data — never commit personal session/XP data
+data/sessions.json
+data/xp_data.json
+
+# User settings — contains local UO path
+config/settings.json
+
+# PyInstaller temp files
+*.manifest
+*.tmp
+_update.zip
+_update_tmp/
+_update_apply.bat
+_extract.vbs
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/

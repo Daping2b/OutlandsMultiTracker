@@ -1,0 +1,11 @@
+{
+  "2026-05-23": {
+    "Pulma": {"value": "-0.0%", "type": "sanctuary", "label": "Sanctuary Dungeon"},
+    "Tidal Tomb": {"value": "-0.0%", "type": "challenger", "label": "Challenger Dungeon"},
+    "Cavernam": {"value": "+25.0%", "type": "respawn", "label": "Faster Respawn"},
+    "Shadowspire Cathedral": {"value": "+15.0%", "type": "gold_loot", "label": "Gold Loot"},
+    "Kraul Hive": {"value": "+20.0%", "type": "experience", "label": "Experience"},
+    "Anchor's Rest": {"value": "+10.0%", "type": "vendor", "label": "Vendor Rebate"},
+    "Terran": {"value": "+15.0%", "type": "crafting", "label": "Exceptional Crafting"}
+  }
+}

@@ -1,0 +1,136 @@
+[
+  {
+    "version": "0.52",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Guild button added in navigation (Coming Soon)"
+      ],
+      "IMPROVEMENT": [
+        "Activities tree — bonus icons replace triangle for dungeons with active bonus, aligned names",
+        "Bonus column header now uses dedicated bonus icon",
+        "Patch Notes redesigned — separated panels per version with categories"
+      ]
+    }
+  },
+  {
+    "version": "0.51",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "IMPROVEMENT": [
+        "Bonus column moved after Exp column",
+        "Bonus column now shows icon instead of text"
+      ],
+      "BUG FIX": [
+        "Bonus column was displayed before Exp"
+      ]
+    }
+  },
+  {
+    "version": "0.50",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Added 'Check for Updates' button on Home page — no need to restart (Thanks to [LDS]Noxiah)"
+      ],
+      "IMPROVEMENT": [
+        "Smoother scrolling on Home and How To pages"
+      ]
+    }
+  },
+  {
+    "version": "0.49",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "BUG FIX": [
+        "Auto-update now done entirely in Python — no more PowerShell dependency",
+        "Introduced Updater.exe — separate process handles update without file lock issues"
+      ]
+    }
+  },
+  {
+    "version": "0.44",
+    "date": "2026-05-29",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Weekly Region Bonus system implemented",
+        "Bonus column in Log Analysis shows active bonus per session",
+        "Hover tooltip on bonus icons shows bonus name and value"
+      ]
+    }
+  },
+  {
+    "version": "0.43",
+    "date": "2026-05-29",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Wilderness section — Global shows sessions outside known dungeons"
+      ],
+      "BUG FIX": [
+        "Removed Coming Soon placeholder from Wilderness tree"
+      ]
+    }
+  },
+  {
+    "version": "0.4",
+    "date": "2026-05-28",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Sortable columns with UO icons in Log Analysis",
+        "Splash screen on startup",
+        "Settings page with folder change and full reset",
+        "Delete sessions button (temporary or permanent)"
+      ],
+      "IMPROVEMENT": [
+        "Aspect colors extracted from in-game core images",
+        "Font sizes increased across the app",
+        "Column separators in header"
+      ],
+      "BUG FIX": [
+        "Taskbar icon now shows O-MT logo",
+        "News panel no longer cut off",
+        "Experience All Time button triggers immediately",
+        "Fixed space between expanded session panels and next row"
+      ]
+    }
+  },
+  {
+    "version": "0.3",
+    "date": "2026-05-28",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "All Time button next to all date filters",
+        "UO icons on nav buttons and column headers",
+        "Real-time loading screen with file progress"
+      ],
+      "BUG FIX": [
+        "Fixed image loading for all logos",
+        "Fixed dungeon tree — fully expandable with levels",
+        "Fixed session type column — shows dungeon name directly",
+        "Removed system tray"
+      ]
+    }
+  },
+  {
+    "version": "0.1",
+    "date": "2026-05-27",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Initial release of Outlands Multi Tracker",
+        "Log Analysis with session detection and loot categorization",
+        "Experience tab with monthly/daily/hourly XP chart",
+        "How To tab with Razor scripts",
+        "Multi-character support and date range filtering"
+      ]
+    }
+  }
+]

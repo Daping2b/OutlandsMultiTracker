@@ -1,0 +1,142 @@
+name: Fetch Weekly Region Bonuses
+
+on:
+  schedule:
+    - cron: '5 0 * * 6'     # Every Saturday 2:05 AM UTC+2 (= 0:05 UTC)
+    - cron: '*/5 0-2 * * 6' # Retry every 5 min until 4:00 AM UTC+2 if not found
+  workflow_dispatch:
+
+jobs:
+  fetch-bonuses:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch bonuses from Discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          CHANNEL_ID: "605516711692599297"
+        run: |
+          python3 << 'PYEOF'
+          import requests, json, re, os, sys
+          from datetime import datetime, timezone, timedelta
+
+          token      = os.environ["DISCORD_TOKEN"]
+          channel_id = os.environ["CHANNEL_ID"]
+          headers    = {"Authorization": token, "User-Agent": "OMT-BonusFetcher/1.0"}
+
+          # Load existing bonuses
+          bonuses_path = "config/bonuses.json"
+          try:
+              with open(bonuses_path) as f:
+                  bonuses = json.load(f)
+          except:
+              bonuses = {}
+
+          def get_week_key(dt):
+              """Get Saturday-based week key."""
+              days_since_sat = (dt.weekday() + 2) % 7
+              return (dt - timedelta(days=days_since_sat)).strftime("%Y-%m-%d")
+
+          # Fetch last 100 messages to rebuild full history
+          url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=100"
+          r = requests.get(url, headers=headers)
+          if r.status_code != 200:
+              print(f"Discord API error: {r.status_code} {r.text}")
+              sys.exit(1)
+
+          messages = r.json()
+          print(f"Fetched {len(messages)} messages")
+
+          bonus_types = {
+              "sanctuary dungeon": "sanctuary",
+              "challenger dungeon": "challenger",
+              "faster respawn":     "respawn",
+              "gold loot":          "gold_loot",
+              "experience":         "experience",
+              "vendor rebate":      "vendor",
+              "exceptional crafting": "crafting",
+          }
+
+          new_entries = 0
+          for msg in messages:
+              content = msg.get("content","")
+              for embed in msg.get("embeds",[]):
+                  content += "\n" + embed.get("description","") + "\n" + embed.get("title","")
+                  for field in embed.get("fields",[]):
+                      content += f"\n{field.get('name','')}\n{field.get('value','')}"
+
+              if "Regional Bonuses" not in content and "regional bonuses" not in content.lower():
+                  continue
+
+              # Get message timestamp for week key
+              ts_str = msg.get("timestamp","")
+              try:
+                  ts = datetime.fromisoformat(ts_str.replace("Z","+00:00"))
+                  week_key = get_week_key(ts.astimezone(timezone.utc).replace(tzinfo=None))
+              except:
+                  week_key = get_week_key(datetime.utcnow())
+
+              if week_key in bonuses:
+                  print(f"Week {week_key} already in bonuses, skipping")
+                  continue
+
+              # Parse bonuses
+              lines = [l.strip() for l in content.split("\n") if l.strip()]
+              week_bonuses = {}
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  if i+1 < len(lines):
+                      next_line = lines[i+1]
+                      bonus_match = re.match(r'^([+-][\d.]+%)\s+(.+)$', next_line)
+                      if bonus_match:
+                          dungeon = line.strip("*_")
+                          value   = bonus_match.group(1)
+                          btype_raw = bonus_match.group(2).lower().strip()
+                          btype = next((v for k,v in bonus_types.items() if k in btype_raw), "unknown")
+                          week_bonuses[dungeon] = {
+                              "value": value,
+                              "type": btype,
+                              "label": bonus_match.group(2)
+                          }
+                          i += 2; continue
+                  i += 1
+
+              if week_bonuses:
+                  bonuses[week_key] = week_bonuses
+                  new_entries += 1
+                  print(f"Added {len(week_bonuses)} bonuses for week {week_key}")
+
+          if new_entries == 0:
+              print("No new bonus entries found")
+              # Check if current week is missing — exit with error to trigger retry
+              now = datetime.utcnow()
+              current_week = get_week_key(now)
+              if current_week not in bonuses:
+                  print(f"Current week {current_week} still missing — will retry")
+                  sys.exit(1)
+          
+          with open(bonuses_path, "w") as f:
+              json.dump(bonuses, f, indent=2, ensure_ascii=False)
+          print(f"Saved bonuses.json with {len(bonuses)} weeks")
+          PYEOF
+
+      - name: Commit bonuses
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config/bonuses.json
+          git diff --staged --quiet || git commit -m "Weekly bonuses $(date +%Y-%m-%d)"
+          git push
