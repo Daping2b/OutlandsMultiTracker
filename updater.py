@@ -22,18 +22,16 @@ def main():
     print(f"[Updater] dir={install_dir}")
     print(f"[Updater] exe={exe_name}")
 
-    # Wait for main exe to release its lock (up to 15 seconds)
-    for i in range(15):
+    # Wait for main exe to release its lock (up to 5 seconds, polling every 100ms)
+    for i in range(50):
         try:
-            # Try to rename exe briefly to test if it's locked
             test = main_exe.with_suffix(".tmp_test")
             main_exe.rename(test)
             test.rename(main_exe)
-            print(f"[Updater] Main exe unlocked after {i}s")
+            print(f"[Updater] Main exe unlocked after {i*100}ms")
             break
         except:
-            print(f"[Updater] Waiting for exe to close... ({i+1}s)")
-            time.sleep(1)
+            time.sleep(0.1)
     else:
         print("[Updater] WARNING: exe may still be locked, trying anyway...")
 
@@ -76,7 +74,7 @@ def main():
             # Retry up to 5 times for locked files
             for attempt in range(5):
                 try:
-                    shutil.copy2(item, dest)
+                    shutil.copyfile(str(item), str(dest))
                     break
                 except PermissionError as e:
                     if attempt < 4:
@@ -98,9 +96,8 @@ def main():
     try: zip_path.unlink()
     except: pass
 
-    # Relaunch main exe
+    # Relaunch main exe immediately
     print(f"[Updater] Launching {main_exe}")
-    time.sleep(0.5)
     subprocess.Popen([str(main_exe)], cwd=str(install_dir))
     print("[Updater] Done!")
     sys.exit(0)

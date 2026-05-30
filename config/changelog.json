@@ -5,7 +5,8 @@
     "author": "Daping",
     "changes": {
       "BUG FIX": [
-        "Bonus icons now display correctly in the Activities tree with tooltip on hover"
+        "Bonus icons now display correctly in the Activities tree with tooltip on hover",
+        "App relaunches much faster after an auto-update"
       ]
     }
   },

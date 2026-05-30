@@ -797,7 +797,6 @@ class App(ctk.CTk):
 
     def _refresh_bonus_tree(self):
         self._fill_act_tree()
-        self.after(60, self._draw_overlay)
 
     def _add_tooltip(self, widget, text):
         tip = [None]
@@ -1068,23 +1067,12 @@ class App(ctk.CTk):
         left.grid(row=0,column=0,sticky="nsew",padx=(0,6)); left.pack_propagate(False)
         ctk.CTkLabel(left,text="  ✦  Activities",font=F_HEAD,text_color=GOLD).pack(pady=(12,4),anchor="w")
         ctk.CTkFrame(left,fg_color=GOLD_DK,height=1).pack(fill="x",padx=8,pady=(0,6))
-        # ttk.Treeview for structure (collapse/expand, scroll, selection)
-        # Canvas overlay for bonus icons (ImageTk works on canvas, not on Treeview cells on Windows)
-        tv_frame=tk.Frame(left,bg=BG2); tv_frame.pack(fill="both",expand=True,padx=4,pady=(0,4))
-        self._act_tv=ttk.Treeview(tv_frame,show="tree",selectmode="browse")
-        self._act_tv.pack(fill="both",expand=True)
-        # Overlay canvas — same size as treeview, transparent, sits on top
-        self._act_overlay=tk.Canvas(tv_frame,bg=BG2,highlightthickness=0,cursor="arrow")
-        self._act_overlay.place(relx=0,rely=0,relwidth=1,relheight=1)
+        self._act_tv=ttk.Treeview(left,show="tree",selectmode="browse")
+        self._act_tv.pack(fill="both",expand=True,padx=4,pady=(0,4))
         self._style_tv(); self._fill_act_tree()
         self._act_tv.bind("<<TreeviewSelect>>",self._on_act)
-        self._act_tv.bind("<ButtonPress-1>",self._tree_click_passthrough)
-        self._act_overlay.bind("<ButtonPress-1>",self._overlay_click)
-        self._act_overlay.bind("<Motion>",self._overlay_motion)
-        self._act_overlay.bind("<Leave>",self._overlay_leave)
-        self._act_tv.bind("<Configure>",lambda e:self.after(50,self._draw_overlay))
-        self._act_tv.bind("<<TreeviewOpen>>",lambda e:self.after(10,self._draw_overlay))
-        self._act_tv.bind("<<TreeviewClose>>",lambda e:self.after(10,self._draw_overlay))
+        self._act_tv.bind("<Motion>", self._tree_tooltip_show)
+        self._act_tv.bind("<Leave>",  self._tree_tooltip_hide)
 
         # Right
         right=ctk.CTkFrame(body,fg_color=BG2,border_width=1,border_color=BORDER,corner_radius=4)
@@ -1124,14 +1112,13 @@ class App(ctk.CTk):
                     ph = make_photo(fname, (16,16), transparent=True)
                     if ph:
                         self._tree_bonus_photos[btype] = ph
-            # Build tree structure — no images in cells (Windows limitation)
+            # Store bonus info for tooltips
+            self._tree_bonus_map = {}  # iid -> (label, value)
             tv.insert("","end",iid="All",        text="  ◆  All")
             tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
             tv.insert("","end",iid="Harvesting", text="  🌲  Harvesting")
             dn = tv.insert("","end",iid="Dungeon", text="  ⚔  Dungeon", open=False)
             current_bonuses = self._get_current_bonuses()
-            # Store bonus info per iid for overlay drawing and tooltips
-            self._tree_bonus_map = {}  # iid -> (btype, label, value)
             seen = {}
             for d in self.dung_data.get("dungeons",[]):
                 name = d["name"]
@@ -1142,117 +1129,57 @@ class App(ctk.CTk):
                         if k.lower() in base.lower() or base.lower() in k.lower():
                             bonus = v; break
                     btype = bonus.get("type","") if bonus else ""
-                    iid = f"db_{base}"
+                    img   = self._tree_bonus_photos.get(btype) if btype else None
+                    iid   = f"db_{base}"
+                    # image= in tv.insert on #0 column works on Windows — unlike tag_configure
                     seen[base] = tv.insert(dn,"end",iid=iid,
                                            text=f"   {base}",
+                                           image=img if img else "",
                                            open=False)
-                    if bonus and btype in self._tree_bonus_photos:
-                        self._tree_bonus_map[iid] = (
-                            btype,
-                            bonus.get("label",""),
-                            bonus.get("value","")
-                        )
+                    if bonus:
+                        self._tree_bonus_map[iid] = (bonus.get("label",""), bonus.get("value",""))
                 tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
             wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", open=False)
             tv.insert(wn,"end",iid="wild_global", text="   ◆  Global")
-            # Draw overlay icons after tree is populated
-            self.after(50, self._draw_overlay)
         except Exception as e:
             print(f"[TREE] _fill_act_tree error: {e}")
         finally:
             self._tree_building = False
 
-    def _draw_overlay(self):
-        """Draw bonus icons on canvas overlay at exact treeview cell positions."""
+    def _tree_tooltip_show(self, event):
+        """Show bonus tooltip when hovering a dungeon row with a bonus."""
         try:
-            ov = self._act_overlay
             tv = self._act_tv
-            ov.delete("bonus")  # clear previous icons
+            iid = tv.identify_row(event.y)
             bonus_map = getattr(self, "_tree_bonus_map", {})
-            photos = getattr(self, "_tree_bonus_photos", {})
-            if not bonus_map: return
-            for iid, (btype, label, value) in bonus_map.items():
-                try:
-                    bbox = tv.bbox(iid)
-                    if not bbox: continue  # item not visible (collapsed)
-                    x, y, w, h = bbox
-                    img = photos.get(btype)
-                    if not img: continue
-                    # Draw icon at left of row, vertically centered
-                    ix = 6
-                    iy = y + h // 2
-                    ov.create_image(ix, iy, image=img, anchor="w", tags=("bonus", f"tip_{iid}"))
-                except Exception:
-                    continue
-        except Exception as e:
-            print(f"[OVERLAY] draw error: {e}")
-
-    def _overlay_motion(self, event):
-        """Show tooltip when hovering over a bonus icon."""
-        try:
-            items = self._act_overlay.find_overlapping(event.x-2, event.y-2, event.x+2, event.y+2)
-            bonus_map = getattr(self, "_tree_bonus_map", {})
-            tip_text = None
-            for item in items:
-                tags = self._act_overlay.gettags(item)
-                for tag in tags:
-                    if tag.startswith("tip_"):
-                        iid = tag[4:]
-                        if iid in bonus_map:
-                            _, label, value = bonus_map[iid]
-                            tip_text = f"{label}  {value}"
-                            break
-                if tip_text: break
-            if tip_text:
-                self._show_overlay_tip(event.x_root, event.y_root, tip_text)
+            if iid in bonus_map:
+                label, value = bonus_map[iid]
+                tip = f"{label}  {value}"
+                if not hasattr(self, "_tv_tip") or not self._tv_tip:
+                    self._tv_tip = tk.Toplevel(self)
+                    self._tv_tip.wm_overrideredirect(True)
+                    self._tv_tip.attributes("-topmost", True)
+                    self._tv_tip_lbl = tk.Label(self._tv_tip, background="#1a1a1a",
+                                                foreground=GOLD_LT, font=F_SMALL,
+                                                relief="solid", borderwidth=1, padx=6, pady=3)
+                    self._tv_tip_lbl.pack()
+                self._tv_tip_lbl.configure(text=tip)
+                self._tv_tip.wm_geometry(f"+{event.x_root+14}+{event.y_root+6}")
+                self._tv_tip.deiconify()
             else:
-                self._hide_overlay_tip()
+                self._tree_tooltip_hide(event)
         except Exception:
             pass
 
-    def _overlay_leave(self, event):
-        self._hide_overlay_tip()
-
-    def _show_overlay_tip(self, x, y, text):
-        if not hasattr(self, "_ov_tip") or not self._ov_tip:
-            self._ov_tip = tk.Toplevel(self)
-            self._ov_tip.wm_overrideredirect(True)
-            self._ov_tip.attributes("-topmost", True)
-            self._ov_tip_lbl = tk.Label(self._ov_tip, background="#1a1a1a",
-                                        foreground=GOLD_LT, font=F_SMALL,
-                                        relief="solid", borderwidth=1, padx=6, pady=3)
-            self._ov_tip_lbl.pack()
-        self._ov_tip_lbl.configure(text=text)
-        self._ov_tip.wm_geometry(f"+{x+14}+{y+6}")
-        self._ov_tip.deiconify()
-
-    def _hide_overlay_tip(self):
-        if hasattr(self, "_ov_tip") and self._ov_tip:
-            try: self._ov_tip.withdraw()
+    def _tree_tooltip_hide(self, event):
+        if hasattr(self, "_tv_tip") and self._tv_tip:
+            try: self._tv_tip.withdraw()
             except: pass
-
-    def _overlay_click(self, event):
-        """Pass click through overlay to the treeview beneath."""
-        try:
-            # Convert overlay coords to treeview coords and simulate click
-            tv = self._act_tv
-            # Identify item at click position
-            iid = tv.identify_row(event.y)
-            if iid:
-                tv.selection_set(iid)
-                tv.focus(iid)
-                self._act_f = iid
-                self._refresh()
-        except Exception as e:
-            print(f"[OVERLAY] click error: {e}")
-
-    def _tree_click_passthrough(self, event):
-        """Ensure overlay stays on top after treeview interaction."""
-        self.after(10, self._draw_overlay)
 
     def _on_act(self,_):
         sel=self._act_tv.selection()
-        if sel: self._act_f=sel[0]; self._refresh(); self.after(10,self._draw_overlay)
+        if sel: self._act_f=sel[0]; self._refresh()
+
 
     def _filtered(self,ignore_dates=False):
         ss=list(self.sessions); f=self._act_f
