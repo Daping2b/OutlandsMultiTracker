@@ -739,17 +739,22 @@ class App(ctk.CTk):
     def _fetch_bonuses(self):
         """Download latest bonuses.json from GitHub."""
         try:
-            import urllib.request as _ur
+            import urllib.request as _ur, ssl
             url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/config/bonuses.json"
-            req = _ur.Request(url, headers={"User-Agent":"OutlandsMultiTracker"})
-            with _ur.urlopen(req, timeout=8) as r:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = _ur.Request(url, headers={"User-Agent":"Mozilla/5.0 OutlandsMultiTracker"})
+            with _ur.urlopen(req, timeout=10, context=ctx) as r:
                 data = json.loads(r.read().decode())
             if data:
                 self.bonuses_db = data
+                # Force reload of bonus icons on next tree refresh
+                self._tree_bonus_photos = {}
                 save_json(CONFIG_DIR/"bonuses.json", data)
                 self.after(0, self._refresh_bonus_tree)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[BONUSES] Fetch failed: {e}")
 
     def _get_week_key(self, dt=None):
         if dt is None: dt = datetime.now()
@@ -1074,13 +1079,13 @@ class App(ctk.CTk):
 
     def _fill_act_tree(self):
         tv=self._act_tv; tv.delete(*tv.get_children())
-        # Load bonus icons for tree (small size)
-        self._tree_bonus_photos = {}
-        for btype, fname in self.BONUS_ICONS.items():
-            ph = make_photo(fname, (14,14), transparent=True)
-            if ph:
-                self._tree_bonus_photos[btype] = ph
-                tv.tag_configure(f"bonus_{btype}", image=ph)
+        # Load bonus icons once — stored on self to prevent garbage collection
+        if not hasattr(self, "_tree_bonus_photos") or not self._tree_bonus_photos:
+            self._tree_bonus_photos = {}
+            for btype, fname in self.BONUS_ICONS.items():
+                ph = make_photo(fname, (14,14), transparent=True)
+                if ph:
+                    self._tree_bonus_photos[btype] = ph
         tv.insert("","end",iid="All",        text="  ◆  All")
         tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
         tv.insert("","end",iid="Harvesting", text="  🌲  Harvesting")
@@ -1090,19 +1095,20 @@ class App(ctk.CTk):
         for d in self.dung_data.get("dungeons",[]):
             name=d["name"]; base=re.sub(r'\s+Lv-\d+$','',name).strip()
             if base not in seen:
-                # Check if this dungeon base has a bonus this week
                 bonus = None
                 for k,v in current_bonuses.items():
                     if k.lower() in base.lower() or base.lower() in k.lower():
                         bonus = v; break
                 btype = bonus.get("type","") if bonus else ""
-                tag = (f"bonus_{btype}",) if btype in self._tree_bonus_photos else ()
                 bonus_txt = f"  {bonus.get('value','')} {bonus.get('label','')}" if bonus else ""
+                img = self._tree_bonus_photos.get(btype) if btype else None
                 seen[base]=tv.insert(dn,"end",iid=f"db_{base}",
-                                     text=f"   ▸  {base}{bonus_txt}",
-                                     open=False, tags=tag)
+                                     text=f"   {base}{bonus_txt}",
+                                     image=img if img else "",
+                                     open=False)
             tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
         wn=tv.insert("","end",iid="Wilderness",text="  🌿  Wilderness",open=False)
+        tv.insert(wn,"end",iid="wild_global",text="   ◆  Global")
         tv.insert(wn,"end",iid="wild_global",text="   ◆  Global")
 
     def _on_act(self,_):

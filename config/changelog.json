@@ -5,8 +5,11 @@
     "author": "Daping",
     "changes": {
       "BUG FIX": [
-        "Auto-update download now retries with a fallback method if the first attempt fails — fixes persistent update errors on some systems",
-        "Update error message now shows the actual error instead of blank"
+        "Auto-update download now retries with a fallback method if the first attempt fails",
+        "Update error message now shows the actual error instead of blank",
+        "Bonus icons in Activities tree now load and display reliably — fixed garbage collection issue",
+        "Bonus icon cache resets properly after fetching new weekly bonuses from GitHub",
+        "Bonus fetch from GitHub now uses SSL fix for consistency with the update system"
       ]
     }
   },
