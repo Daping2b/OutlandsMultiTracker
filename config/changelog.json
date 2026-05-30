@@ -4,8 +4,8 @@
     "date": "2026-05-30",
     "author": "Daping",
     "changes": {
-      "BUG FIX": [
-        "Stability pass — fixed multiple crashes, race conditions, memory leaks and code inconsistencies across the entire codebase"
+      "IMPROVEMENT": [
+        "Activities panel fully rebuilt — bonus icons now display correctly with tooltip on hover, names perfectly aligned"
       ]
     }
   },

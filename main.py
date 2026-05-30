@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 from pathlib import Path
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 from PIL import Image, ImageTk
@@ -1067,10 +1067,10 @@ class App(ctk.CTk):
         left.grid(row=0,column=0,sticky="nsew",padx=(0,6)); left.pack_propagate(False)
         ctk.CTkLabel(left,text="  ✦  Activities",font=F_HEAD,text_color=GOLD).pack(pady=(12,4),anchor="w")
         ctk.CTkFrame(left,fg_color=GOLD_DK,height=1).pack(fill="x",padx=8,pady=(0,6))
-        self._act_tv=ttk.Treeview(left,show="tree",selectmode="browse")
-        self._act_tv.pack(fill="both",expand=True,padx=4,pady=(0,4))
-        self._style_tv(); self._fill_act_tree()
-        self._act_tv.bind("<<TreeviewSelect>>",self._on_act)
+        self._act_scroll=ctk.CTkScrollableFrame(left,fg_color=BG2,scrollbar_button_color=BG4,
+                                                 scrollbar_button_hover_color=BG5)
+        self._act_scroll.pack(fill="both",expand=True,padx=2,pady=(0,4))
+        self._fill_act_tree()
 
         # Right
         right=ctk.CTkFrame(body,fg_color=BG2,border_width=1,border_color=BORDER,corner_radius=4)
@@ -1088,60 +1088,102 @@ class App(ctk.CTk):
 
     def _all_time_log(self): self._refresh(ignore_dates=True)
 
-    def _style_tv(self):
-        s=ttk.Style(); s.theme_use("clam")
-        s.configure("Treeview",background=BG2,foreground=TEXT,fieldbackground=BG2,
-                    borderwidth=0,rowheight=28,font=F_BODY)
-        s.configure("Treeview.Heading",background=BG3,foreground=GOLD)
-        s.map("Treeview",background=[("selected",ACCENT)])
-
     def _fill_act_tree(self):
-        """Rebuild the activities tree. Safe to call multiple times."""
+        """Rebuild the activities panel."""
         if getattr(self, "_tree_building", False):
             return
         self._tree_building = True
         try:
-            tv = self._act_tv
-            tv.delete(*tv.get_children())
-            # Load bonus icons once — kept on self to prevent GC
+            # Clear existing widgets
+            for w in self._act_scroll.winfo_children():
+                w.destroy()
+
+            # Load bonus icons once — 16x16, kept on self to prevent GC
             if not getattr(self, "_tree_bonus_photos", None):
                 self._tree_bonus_photos = {}
                 for btype, fname in self.BONUS_ICONS.items():
-                    ph = make_photo(fname, (14,14), transparent=True)
+                    ph = make_photo(fname, (16,16), transparent=True)
                     if ph:
                         self._tree_bonus_photos[btype] = ph
-            tv.insert("","end",iid="All",        text="  ◆  All")
-            tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
-            tv.insert("","end",iid="Harvesting", text="  🌲  Harvesting")
-            dn = tv.insert("","end",iid="Dungeon", text="  ⚔  Dungeon", open=False)
+
             current_bonuses = self._get_current_bonuses()
+            ICON_W = 20   # fixed width for icon column — ensures name alignment
+
+            def _row(iid, text, indent=0, icon_ph=None, tooltip=None, bold=False):
+                """Create a clickable row in the activities panel."""
+                is_sel = (self._act_f == iid)
+                fg = GOLD_LT if is_sel else TEXT
+                bg = ACCENT if is_sel else "transparent"
+                row = ctk.CTkFrame(self._act_scroll, fg_color=bg, corner_radius=3,
+                                   height=28, cursor="hand2")
+                row.pack(fill="x", pady=1, padx=2)
+                row.pack_propagate(False)
+
+                # Indent spacer
+                if indent:
+                    ctk.CTkFrame(row, fg_color="transparent", width=indent).pack(side="left")
+
+                # Icon slot (fixed width — always present for alignment)
+                ico_frame = ctk.CTkFrame(row, fg_color="transparent", width=ICON_W)
+                ico_frame.pack(side="left")
+                ico_frame.pack_propagate(False)
+                if icon_ph:
+                    ico_lbl = ctk.CTkLabel(ico_frame, image=icon_ph, text="",
+                                           fg_color="transparent", width=ICON_W)
+                    ico_lbl.pack(expand=True)
+                    if tooltip:
+                        self._add_tooltip(ico_lbl, tooltip)
+
+                # Name label
+                font = F_BODY_B if bold else F_BODY
+                lbl = ctk.CTkLabel(row, text=text, text_color=fg, font=font,
+                                   anchor="w", fg_color="transparent")
+                lbl.pack(side="left", fill="x", expand=True, padx=(2,4))
+
+                def _select(i=iid):
+                    self._act_f = i
+                    self._fill_act_tree()
+                    self._refresh()
+
+                row.bind("<Button-1>", lambda e, fn=_select: fn())
+                lbl.bind("<Button-1>", lambda e, fn=_select: fn())
+                if icon_ph:
+                    ico_lbl.bind("<Button-1>", lambda e, fn=_select: fn())
+
+            # ── Top-level items ───────────────────────────────────────────────
+            _row("All",        "◆  All",        indent=6,  bold=True)
+            _row("Boating",    "⚓  Boating",    indent=6)
+            _row("Harvesting", "🌲  Harvesting", indent=6)
+
+            # ── Dungeon section ───────────────────────────────────────────────
+            # dung_sel not used — kept for future use
+            _row("Dungeon", "⚔  Dungeon", indent=6, bold=True)
+
             seen = {}
-            for d in self.dung_data.get("dungeons",[]):
+            for d in self.dung_data.get("dungeons", []):
                 name = d["name"]
                 base = re.sub(r'\s+Lv-\d+$', '', name).strip()
                 if base not in seen:
                     bonus = None
-                    for k,v in current_bonuses.items():
+                    for k, v in current_bonuses.items():
                         if k.lower() in base.lower() or base.lower() in k.lower():
                             bonus = v; break
-                    btype = bonus.get("type","") if bonus else ""
-                    bonus_txt = f"  {bonus.get('value','')} {bonus.get('label','')}" if bonus else ""
+                    btype = bonus.get("type", "") if bonus else ""
                     img = self._tree_bonus_photos.get(btype) if btype else None
-                    seen[base] = tv.insert(dn,"end",iid=f"db_{base}",
-                                           text=f"   {base}{bonus_txt}",
-                                           image=img if img else "",
-                                           open=False)
-                tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
-            wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", open=False)
-            tv.insert(wn,"end",iid="wild_global", text="   ◆  Global")
+                    tip = f"{bonus.get('label','')}  {bonus.get('value','')}" if bonus else None
+                    _row(f"db_{base}", base, indent=14, icon_ph=img, tooltip=tip)
+                    seen[base] = True
+                # Sub-level row (Lv-1, Lv-2...) — no icon, deeper indent
+                _row(f"dl_{name}", name, indent=36)
+
+            # ── Wilderness section ────────────────────────────────────────────
+            _row("Wilderness",  "🌿  Wilderness", indent=6, bold=True)
+            _row("wild_global", "◆  Global",      indent=14)
+
         except Exception as e:
             print(f"[TREE] _fill_act_tree error: {e}")
         finally:
             self._tree_building = False
-
-    def _on_act(self,_):
-        sel=self._act_tv.selection()
-        if sel: self._act_f=sel[0]; self._refresh()
 
     def _filtered(self,ignore_dates=False):
         ss=list(self.sessions); f=self._act_f
@@ -1266,6 +1308,18 @@ class App(ctk.CTk):
         sess_bonus = self._get_bonus_for_session(s)
         bonus_txt = f"{sess_bonus.get('value','')}\n{sess_bonus.get('label','')}" if sess_bonus else "—"
         bonus_type = sess_bonus.get("type","") if sess_bonus else ""
+        # Pre-load bonus photo (32x32 for row display)
+        bonus_photo = None
+        if sess_bonus and bonus_type in self.BONUS_ICONS:
+            key = (bonus_type, "row")
+            if key not in getattr(self, "_row_bonus_photos", {}):
+                if not hasattr(self, "_row_bonus_photos"):
+                    self._row_bonus_photos = {}
+                ph = make_photo(self.BONUS_ICONS[bonus_type], (32,32), transparent=True)
+                if ph:
+                    self._row_bonus_photos[key] = ph
+            bonus_photo = getattr(self, "_row_bonus_photos", {}).get(key)
+
         vals=[
             (s.get("player","?"), 110, False),
             (stype,               165, True),
@@ -1274,22 +1328,28 @@ class App(ctk.CTk):
             (f"{gold:,}\n({rate(gold,mins)})",   105, False),
             (f"{doub:,}\n({rate(doub,mins)})",   115, False),
             (f"{rare}\n({rate(rare,mins)})",      80, False),
-            (bonus_txt,            90, False),
+            (None,                 90, False),  # bonus — handled separately
             (f"{harv:,}\n({rate(harv,mins)})",    95, False),
             (f"{exp:,.0f}\n({rate(exp,mins)})",  110, False),
         ]
         for i,(text,cw,wrap) in enumerate(vals):
-            lbl = ctk.CTkLabel(row,text=text,width=cw,text_color=TEXT,font=F_BODY,
-                         justify="center",
-                         wraplength=cw-4 if wrap else 0)
-            lbl.pack(side="left",padx=(gap,0),pady=2)
-            # Add bonus icon tooltip
-            if i==7 and sess_bonus and bonus_type in self.BONUS_ICONS:
-                bph = self._tree_bonus_photos.get(bonus_type) or make_photo(self.BONUS_ICONS[bonus_type],(16,16),transparent=True)
-                if bph:
-                    if bonus_type not in self._tree_bonus_photos:
-                        self._photos.append(bph)
-                    self._add_tooltip(lbl, f"{sess_bonus.get('label','')} {sess_bonus.get('value','')}")
+            if i == 7:
+                # Bonus cell — icon if available, text fallback
+                cell = ctk.CTkFrame(row, fg_color="transparent", width=cw, height=28)
+                cell.pack(side="left", padx=(gap,0), pady=2)
+                cell.pack_propagate(False)
+                if bonus_photo and sess_bonus:
+                    ico_lbl = ctk.CTkLabel(cell, image=bonus_photo, text="",
+                                           fg_color="transparent", width=cw)
+                    ico_lbl.pack(expand=True)
+                    self._add_tooltip(ico_lbl, f"{sess_bonus.get('label','')}  {sess_bonus.get('value','')}")
+                else:
+                    ctk.CTkLabel(cell, text="—", width=cw, text_color=DIM2,
+                                 font=F_BODY, justify="center").pack(expand=True)
+            else:
+                lbl = ctk.CTkLabel(row, text=text, width=cw, text_color=TEXT, font=F_BODY,
+                                   justify="center", wraplength=cw-4 if wrap else 0)
+                lbl.pack(side="left", padx=(gap,0), pady=2)
         eb=ctk.CTkButton(row,text="▶",width=30,height=30,fg_color="transparent",text_color=DIM2,hover_color=BG4,font=F_BODY)
         eb.pack(side="right",padx=6)
         detail=ctk.CTkFrame(outer,fg_color=BG,corner_radius=0); state=[False]
