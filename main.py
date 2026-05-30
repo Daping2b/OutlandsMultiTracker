@@ -1,5 +1,5 @@
 """
-Outlands Multi Tracker v0.3
+Outlands Multi Tracker
 By Daping — Windows
 """
 import sys, json, re, csv, threading
@@ -51,10 +51,13 @@ def load_json(path, default=None):
     except: return default if default is not None else {}
 
 def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[SAVE] Failed to save {path}: {e}")
 
-VER_DATA    = load_json(CONFIG_DIR/"version.json", {"version":"0.43","app_name":"Outlands Multi Tracker"})
+VER_DATA    = load_json(CONFIG_DIR/"version.json", {"version":"0.0","app_name":"Outlands Multi Tracker"})
 APP_VERSION = VER_DATA.get("version","0.3")
 APP_NAME    = VER_DATA.get("app_name","Outlands Multi Tracker")
 SETTINGS_F  = CONFIG_DIR / "settings.json"
@@ -766,8 +769,7 @@ class App(ctk.CTk):
                 data = json.loads(r.read().decode())
             if data:
                 self.bonuses_db = data
-                # Force reload of bonus icons on next tree refresh
-                self._tree_bonus_photos = {}
+                self._tree_bonus_photos = {}  # force icon reload
                 save_json(CONFIG_DIR/"bonuses.json", data)
                 self.after(0, self._refresh_bonus_tree)
         except Exception as e:
@@ -794,8 +796,7 @@ class App(ctk.CTk):
         return self.bonuses_db.get(self._get_week_key(), {})
 
     def _refresh_bonus_tree(self):
-        try: self._fill_act_tree()
-        except: pass
+        self._fill_act_tree()
 
     def _add_tooltip(self, widget, text):
         tip = [None]
@@ -1095,38 +1096,48 @@ class App(ctk.CTk):
         s.map("Treeview",background=[("selected",ACCENT)])
 
     def _fill_act_tree(self):
-        tv=self._act_tv; tv.delete(*tv.get_children())
-        # Load bonus icons once — stored on self to prevent garbage collection
-        if not hasattr(self, "_tree_bonus_photos") or not self._tree_bonus_photos:
-            self._tree_bonus_photos = {}
-            for btype, fname in self.BONUS_ICONS.items():
-                ph = make_photo(fname, (14,14), transparent=True)
-                if ph:
-                    self._tree_bonus_photos[btype] = ph
-        tv.insert("","end",iid="All",        text="  ◆  All")
-        tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
-        tv.insert("","end",iid="Harvesting", text="  🌲  Harvesting")
-        dn=tv.insert("","end",iid="Dungeon",text="  ⚔  Dungeon",open=False)
-        current_bonuses = self._get_current_bonuses()
-        seen={}
-        for d in self.dung_data.get("dungeons",[]):
-            name=d["name"]; base=re.sub(r'\s+Lv-\d+$','',name).strip()
-            if base not in seen:
-                bonus = None
-                for k,v in current_bonuses.items():
-                    if k.lower() in base.lower() or base.lower() in k.lower():
-                        bonus = v; break
-                btype = bonus.get("type","") if bonus else ""
-                bonus_txt = f"  {bonus.get('value','')} {bonus.get('label','')}" if bonus else ""
-                img = self._tree_bonus_photos.get(btype) if btype else None
-                seen[base]=tv.insert(dn,"end",iid=f"db_{base}",
-                                     text=f"   {base}{bonus_txt}",
-                                     image=img if img else "",
-                                     open=False)
-            tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
-        wn=tv.insert("","end",iid="Wilderness",text="  🌿  Wilderness",open=False)
-        tv.insert(wn,"end",iid="wild_global",text="   ◆  Global")
-        tv.insert(wn,"end",iid="wild_global",text="   ◆  Global")
+        """Rebuild the activities tree. Safe to call multiple times."""
+        if getattr(self, "_tree_building", False):
+            return
+        self._tree_building = True
+        try:
+            tv = self._act_tv
+            tv.delete(*tv.get_children())
+            # Load bonus icons once — kept on self to prevent GC
+            if not getattr(self, "_tree_bonus_photos", None):
+                self._tree_bonus_photos = {}
+                for btype, fname in self.BONUS_ICONS.items():
+                    ph = make_photo(fname, (14,14), transparent=True)
+                    if ph:
+                        self._tree_bonus_photos[btype] = ph
+            tv.insert("","end",iid="All",        text="  ◆  All")
+            tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
+            tv.insert("","end",iid="Harvesting", text="  🌲  Harvesting")
+            dn = tv.insert("","end",iid="Dungeon", text="  ⚔  Dungeon", open=False)
+            current_bonuses = self._get_current_bonuses()
+            seen = {}
+            for d in self.dung_data.get("dungeons",[]):
+                name = d["name"]
+                base = re.sub(r'\s+Lv-\d+$', '', name).strip()
+                if base not in seen:
+                    bonus = None
+                    for k,v in current_bonuses.items():
+                        if k.lower() in base.lower() or base.lower() in k.lower():
+                            bonus = v; break
+                    btype = bonus.get("type","") if bonus else ""
+                    bonus_txt = f"  {bonus.get('value','')} {bonus.get('label','')}" if bonus else ""
+                    img = self._tree_bonus_photos.get(btype) if btype else None
+                    seen[base] = tv.insert(dn,"end",iid=f"db_{base}",
+                                           text=f"   {base}{bonus_txt}",
+                                           image=img if img else "",
+                                           open=False)
+                tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
+            wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", open=False)
+            tv.insert(wn,"end",iid="wild_global", text="   ◆  Global")
+        except Exception as e:
+            print(f"[TREE] _fill_act_tree error: {e}")
+        finally:
+            self._tree_building = False
 
     def _on_act(self,_):
         sel=self._act_tv.selection()
@@ -1192,9 +1203,7 @@ class App(ctk.CTk):
         else: self._sort_col=col; self._sort_rev=False
         self._refresh()
 
-    # Column definitions: (key, label, icon_file, width)
-    # (key, label, icon, width)
-    # GAP=4 between each column — must be the same in header AND rows
+    # Columns: (key, label, icon_file, width) — GAP=4 between each column in header AND rows
     COL_GAP = 4
     COLS=[
         ("",         "",           None,                               40),
@@ -1244,15 +1253,15 @@ class App(ctk.CTk):
         hdr.after(50, _draw_seps)
 
     def _draw_row(self,idx,s):
-        mins=dur_min(s); g,d,r,j,h,e=s_gold(s),s_doub(s),s_rare(s),s_junk(s),s_harvest(s),s_exp(s)
+        mins=dur_min(s); gold,doub,rare,junk,harv,exp=s_gold(s),s_doub(s),s_rare(s),s_junk(s),s_harvest(s),s_exp(s)
         stype=type_display(s); dt=session_date(s); bg=ROW_A if idx%2==0 else ROW_B
         outer=ctk.CTkFrame(self._inner,fg_color=BG,corner_radius=0); outer.pack(fill="x",pady=1)
         row=ctk.CTkFrame(outer,fg_color=bg,corner_radius=3); row.pack(fill="x")
         var=tk.BooleanVar(); self._sel[id(s)]=(var,s)
-        g=self.COL_GAP; w0=self.COLS[0][3]
+        gap=self.COL_GAP; w0=self.COLS[0][3]
         ctk.CTkCheckBox(row,variable=var,text="",width=w0,height=28,
                         checkbox_width=16,checkbox_height=16,
-                        checkmark_color=GOLD,fg_color=ACCENT2,border_color=BORDER).pack(side="left",padx=(g,0))
+                        checkmark_color=GOLD,fg_color=ACCENT2,border_color=BORDER).pack(side="left",padx=(gap,0))
         # Get bonus for this session
         sess_bonus = self._get_bonus_for_session(s)
         bonus_txt = f"{sess_bonus.get('value','')}\n{sess_bonus.get('label','')}" if sess_bonus else "—"
@@ -1262,23 +1271,24 @@ class App(ctk.CTk):
             (stype,               165, True),
             (dt,                  115, False),
             (fmt_dur(mins),        68, False),
-            (f"{g:,}\n({rate(g,mins)})",   105, False),
-            (f"{d:,}\n({rate(d,mins)})",   115, False),
-            (f"{r}\n({rate(r,mins)})",      80, False),
+            (f"{gold:,}\n({rate(gold,mins)})",   105, False),
+            (f"{doub:,}\n({rate(doub,mins)})",   115, False),
+            (f"{rare}\n({rate(rare,mins)})",      80, False),
             (bonus_txt,            90, False),
-            (f"{h:,}\n({rate(h,mins)})",    95, False),
-            (f"{e:,.0f}\n({rate(e,mins)})",110, False),
+            (f"{harv:,}\n({rate(harv,mins)})",    95, False),
+            (f"{exp:,.0f}\n({rate(exp,mins)})",  110, False),
         ]
         for i,(text,cw,wrap) in enumerate(vals):
             lbl = ctk.CTkLabel(row,text=text,width=cw,text_color=TEXT,font=F_BODY,
                          justify="center",
                          wraplength=cw-4 if wrap else 0)
-            lbl.pack(side="left",padx=(g,0),pady=2)
+            lbl.pack(side="left",padx=(gap,0),pady=2)
             # Add bonus icon tooltip
             if i==7 and sess_bonus and bonus_type in self.BONUS_ICONS:
-                bph = make_photo(self.BONUS_ICONS[bonus_type],(16,16),transparent=True)
+                bph = self._tree_bonus_photos.get(bonus_type) or make_photo(self.BONUS_ICONS[bonus_type],(16,16),transparent=True)
                 if bph:
-                    self._photos.append(bph)
+                    if bonus_type not in self._tree_bonus_photos:
+                        self._photos.append(bph)
                     self._add_tooltip(lbl, f"{sess_bonus.get('label','')} {sess_bonus.get('value','')}")
         eb=ctk.CTkButton(row,text="▶",width=30,height=30,fg_color="transparent",text_color=DIM2,hover_color=BG4,font=F_BODY)
         eb.pack(side="right",padx=6)
@@ -1471,19 +1481,7 @@ class App(ctk.CTk):
         # Select all characters before drawing
         players=sorted(set(e["player"] for e in self.xp_events if e.get("player")))
         self._xp_chars=set(players)
-        self._refresh_xp_chars()
         self._draw_xp(ignore_dates=True)
-
-    def _refresh_xp_chars(self):
-        for w in self._xp_cbar.winfo_children(): w.destroy()
-        players=sorted(set(e["player"] for e in self.xp_events if e.get("player")))
-        for p in players:
-            sel=p in self._xp_chars
-            ctk.CTkButton(self._xp_cbar,text=p,width=95,height=30,
-                          fg_color=GOLD if sel else BG4,text_color="#050505" if sel else DIM2,
-                          hover_color=GOLD_LT,corner_radius=4,font=F_BODY,
-                          border_width=1,border_color=BORDER,
-                          command=lambda n=p:self._tog_xp(n)).pack(side="left",padx=2)
 
     def _refresh_xp(self):
         for w in self._xp_cbar.winfo_children(): w.destroy()
