@@ -4,10 +4,12 @@
     "date": "2026-05-30",
     "author": "Daping",
     "changes": {
+      "NEW FEATURE": [
+        "Ossuary Lv-4 location now properly mapped — sessions in this area are correctly detected"
+      ],
       "IMPROVEMENT": [
-        "Auto-update: app now closes instantly when an update is triggered — no more waiting for tkinter cleanup",
-        "Updater: file replacement now uses atomic os.replace() — faster and safer",
-        "Updater: exe unlock polling reduced to 50ms intervals, max wait 3 seconds instead of 15"
+        "Auto-update: app closes instantly when patching",
+        "Weekly bonuses now fetched via GitHub API — always up to date instantly"
       ]
     }
   },

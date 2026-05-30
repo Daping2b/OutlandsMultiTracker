@@ -731,8 +731,6 @@ class App(ctk.CTk):
                 _update_err[0] = e
                 print(f"[UPDATE] Fatal error: {e}")
             if ok:
-                # os._exit(0) bypasses tkinter cleanup entirely — releases exe lock instantly
-                # This is the PyInstaller-recommended pattern for "quit and relaunch"
                 self.after(0, lambda: os._exit(0))
             else:
                 err_msg = str(_update_err[0]) if _update_err[0] else "Unknown error — check internet connection or try downloading manually."
@@ -769,23 +767,31 @@ class App(ctk.CTk):
     }
 
     def _fetch_bonuses(self):
-        """Download latest bonuses.json from GitHub."""
+        """Download latest bonuses.json from GitHub API (bypasses CDN cache)."""
         try:
-            import urllib.request as _ur, ssl
-            url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/config/bonuses.json"
+            import urllib.request as _ur, ssl, base64
+            # GitHub API bypasses CDN cache — always returns latest version
+            url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/config/bonuses.json"
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-            req = _ur.Request(url, headers={"User-Agent":"Mozilla/5.0 OutlandsMultiTracker"})
+            req = _ur.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 OutlandsMultiTracker",
+                "Accept": "application/vnd.github.v3+json"
+            })
             with _ur.urlopen(req, timeout=10, context=ctx) as r:
-                data = json.loads(r.read().decode())
+                api_resp = json.loads(r.read().decode())
+            # API returns base64-encoded content
+            content_b64 = api_resp.get("content", "").replace("\n", "")
+            data = json.loads(base64.b64decode(content_b64).decode("utf-8"))
             if data:
                 self.bonuses_db = data
-                self._tree_bonus_photos = {}  # force icon reload
+                self._tree_bonus_photos = {}
                 save_json(CONFIG_DIR/"bonuses.json", data)
                 self.after(0, self._refresh_bonus_tree)
         except Exception as e:
             print(f"[BONUSES] Fetch failed: {e}")
+
 
     def _get_week_key(self, dt=None):
         if dt is None: dt = datetime.now()
