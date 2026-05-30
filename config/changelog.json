@@ -4,8 +4,23 @@
     "date": "2026-05-30",
     "author": "Daping",
     "changes": {
-      "IMPROVEMENT": [
-        "Activities panel fully rebuilt — bonus icons now display correctly with tooltip on hover, names perfectly aligned"
+      "BUG FIX": [
+        "Bonus icons now display correctly in the Activities tree with tooltip on hover"
+      ]
+    }
+  },
+  {
+    "version": "0.58",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "BUG FIX": [
+        "Auto-update completely overhauled — fixed silent crash causing Error: None on all systems",
+        "Update error message now always shows the actual error reason",
+        "Version comparison now supports patch format (0.57.1, 0.57.2 etc.)",
+        "Downloaded zip is now verified before launching installer",
+        "Updater launch method changed for better Windows compatibility",
+        "Bonus icons in Activities tree fixed — icons now persist correctly after bonus refresh"
       ]
     }
   },
