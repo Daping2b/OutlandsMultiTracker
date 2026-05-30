@@ -731,7 +731,9 @@ class App(ctk.CTk):
                 _update_err[0] = e
                 print(f"[UPDATE] Fatal error: {e}")
             if ok:
-                self.after(0, self.destroy)
+                # os._exit(0) bypasses tkinter cleanup entirely — releases exe lock instantly
+                # This is the PyInstaller-recommended pattern for "quit and relaunch"
+                self.after(0, lambda: os._exit(0))
             else:
                 err_msg = str(_update_err[0]) if _update_err[0] else "Unknown error — check internet connection or try downloading manually."
                 self.after(0, lambda: modal.destroy())
@@ -803,12 +805,7 @@ class App(ctk.CTk):
         return None
 
     def _get_current_bonuses(self):
-        week = self._get_week_key()
-        if week in self.bonuses_db:
-            return self.bonuses_db[week]
-        if self.bonuses_db:
-            return self.bonuses_db[max(self.bonuses_db.keys())]
-        return {}
+        return self.bonuses_db.get(self._get_week_key(), {})
 
     def _refresh_bonus_tree(self):
         self._fill_act_tree()
@@ -919,7 +916,6 @@ class App(ctk.CTk):
             ("Home",         "Home",         "tinkering_candelabra.png"),
             ("Log Analysis", "Log Analysis", "storageshelf.png"),
             ("Experience",   "Experience",   "poisonkit.png"),
-            ("Guild",        "Guild",        "guild.png"),
             ("How To",       "How To",       "shepherdscrook.png"),
         ]
         for key, label, ico_name in tab_defs:
@@ -937,7 +933,6 @@ class App(ctk.CTk):
         self._build_home()
         self._build_log()
         self._build_xp()
-        self._build_guild()
         self._build_howto()
         self._build_settings()
         self._show("Home")
@@ -1084,10 +1079,7 @@ class App(ctk.CTk):
         left.grid(row=0,column=0,sticky="nsew",padx=(0,6)); left.pack_propagate(False)
         ctk.CTkLabel(left,text="  ✦  Activities",font=F_HEAD,text_color=GOLD).pack(pady=(12,4),anchor="w")
         ctk.CTkFrame(left,fg_color=GOLD_DK,height=1).pack(fill="x",padx=8,pady=(0,6))
-        self._act_tv=ttk.Treeview(left,show="tree",columns=("name",),selectmode="browse")
-        # #0 = narrow symbol column (left), "name" = dungeon name (fills rest)
-        self._act_tv.column("#0",   width=28, minwidth=28, stretch=False, anchor="center")
-        self._act_tv.column("name", stretch=True, minwidth=120, anchor="w")
+        self._act_tv=ttk.Treeview(left,show="tree",selectmode="browse")
         self._act_tv.pack(fill="both",expand=True,padx=4,pady=(0,4))
         self._style_tv(); self._fill_act_tree()
         self._act_tv.bind("<<TreeviewSelect>>",self._on_act)
@@ -1134,13 +1126,10 @@ class App(ctk.CTk):
                         self._tree_bonus_photos[btype] = ph
             # Store bonus info for tooltips
             self._tree_bonus_map = {}  # iid -> (label, value)
-            # #0 column = symbol/icon (narrow, 28px), "name" column = label text
-            def ins(parent, iid, sym, label, **kw):
-                return tv.insert(parent,"end",iid=iid,text=sym,values=(label,),**kw)
-            ins("","All",        "◆", "All")
-            ins("","Boating",    "⚓", "Boating")
-            ins("","Harvesting", "⛏", "Harvesting")
-            dn = ins("","Dungeon","⚔", "Dungeon", open=False)
+            tv.insert("","end",iid="All",        text="   ◆   All")
+            tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
+            tv.insert("","end",iid="Harvesting", text="  ⛏  Harvesting")
+            dn = tv.insert("","end",iid="Dungeon", text="  ⚔  Dungeon", open=False)
             current_bonuses = self._get_current_bonuses()
             seen = {}
             for d in self.dung_data.get("dungeons",[]):
@@ -1151,23 +1140,18 @@ class App(ctk.CTk):
                     for k,v in current_bonuses.items():
                         if k.lower() in base.lower() or base.lower() in k.lower():
                             bonus = v; break
-                    btype = bonus.get("type","") if bonus else ""
-                    # Show symbol for positive bonuses AND for sanctuary/challenger type indicators
-                    try:
-                        bonus_val = float(bonus.get("value","0").replace("%","").replace("+","").strip()) if bonus else 0
-                    except:
-                        bonus_val = 0
-                    is_type_indicator = btype in ("sanctuary","challenger")
-                    has_symbol = bonus is not None and (bonus_val > 0 or is_type_indicator)
-                    symbol = self.BONUS_SYMBOLS.get(btype,"") if has_symbol else ""
-                    iid = f"db_{base}"
-                    seen[base] = ins(dn, iid, symbol, base, open=False)
-                    if has_symbol:
-                        tip_val = bonus.get("value","") if bonus_val > 0 else ""
-                        self._tree_bonus_map[iid] = (bonus.get("label",""), tip_val)
-                ins(seen[base], f"dl_{name}", "", name)
-            wn = ins("","Wilderness","🌿","Wilderness",open=False)
-            ins(wn,"wild_global","◆","Global")
+                    btype  = bonus.get("type","") if bonus else ""
+                    symbol = self.BONUS_SYMBOLS.get(btype, "⭐") if bonus else ""
+                    prefix = f"{symbol} " if symbol else "   "
+                    iid    = f"db_{base}"
+                    seen[base] = tv.insert(dn,"end",iid=iid,
+                                           text=f"{prefix}{base}",
+                                           open=False)
+                    if bonus:
+                        self._tree_bonus_map[iid] = (bonus.get("label",""), bonus.get("value",""))
+                tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
+            wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", open=False)
+            tv.insert(wn,"end",iid="wild_global", text="   ◆  Global")
         except Exception as e:
             print(f"[TREE] _fill_act_tree error: {e}")
         finally:
@@ -1682,23 +1666,6 @@ class App(ctk.CTk):
                 ctk.CTkLabel(row,text=text,width=w,
                              text_color=color if text==asp else TEXT,
                              font=F_BODY_B if text==asp else F_BODY).pack(side="left",padx=4,pady=3)
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # GUILD
-    # ═══════════════════════════════════════════════════════════════════════════
-    def _build_guild(self):
-        page=ctk.CTkFrame(self._body,fg_color=BG,corner_radius=0)
-        self._pages["Guild"]=page
-        _,scroll,_=make_scrollable(page,bg=BG)
-        ico=load_pil("guild.png",transparent=True)
-        if ico:
-            ico=ico.resize((120,120),Image.LANCZOS)
-            ph=ImageTk.PhotoImage(ico); self._keep(ph)
-            ctk.CTkLabel(scroll,image=ph,text="",fg_color=BG).pack(pady=(40,16))
-        ctk.CTkLabel(scroll,text="Guild",font=("Georgia",28,"bold"),text_color=GOLD_LT).pack()
-        ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=80,pady=12)
-        ctk.CTkLabel(scroll,text="Coming Soon",font=("Palatino Linotype",18,"italic"),
-                     text_color=DIM2).pack(pady=8)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # HOW TO
