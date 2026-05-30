@@ -779,24 +779,11 @@ class App(ctk.CTk):
                 data = json.loads(r.read().decode())
             if data:
                 self.bonuses_db = data
-                self._tree_bonus_photos = {}
+                self._tree_bonus_photos = {}  # force icon reload
                 save_json(CONFIG_DIR/"bonuses.json", data)
-                print(f"[BONUSES] Updated — keys: {list(data.keys())}")
                 self.after(0, self._refresh_bonus_tree)
         except Exception as e:
             print(f"[BONUSES] Fetch failed: {e}")
-
-    def _get_current_bonuses_data(self):
-        """Return bonuses for current week, falling back to most recent available week."""
-        week = self._get_week_key()
-        if week in self.bonuses_db:
-            return self.bonuses_db[week]
-        # Fallback: return most recent week
-        if self.bonuses_db:
-            latest = max(self.bonuses_db.keys())
-            print(f"[BONUSES] Week {week} not found, using {latest}")
-            return self.bonuses_db[latest]
-        return {}
 
     def _get_week_key(self, dt=None):
         if dt is None: dt = datetime.now()
@@ -816,7 +803,13 @@ class App(ctk.CTk):
         return None
 
     def _get_current_bonuses(self):
-        return self._get_current_bonuses_data()
+        week = self._get_week_key()
+        if week in self.bonuses_db:
+            return self.bonuses_db[week]
+        if self.bonuses_db:
+            latest = max(self.bonuses_db.keys())
+            return self.bonuses_db[latest]
+        return {}
 
     def _refresh_bonus_tree(self):
         self._fill_act_tree()
@@ -1092,7 +1085,9 @@ class App(ctk.CTk):
         left.grid(row=0,column=0,sticky="nsew",padx=(0,6)); left.pack_propagate(False)
         ctk.CTkLabel(left,text="  ✦  Activities",font=F_HEAD,text_color=GOLD).pack(pady=(12,4),anchor="w")
         ctk.CTkFrame(left,fg_color=GOLD_DK,height=1).pack(fill="x",padx=8,pady=(0,6))
-        self._act_tv=ttk.Treeview(left,show="tree",selectmode="browse")
+        self._act_tv=ttk.Treeview(left,show="tree",columns=("sym",),selectmode="browse")
+        self._act_tv.column("#0",   stretch=True,  minwidth=140)
+        self._act_tv.column("sym",  stretch=False, width=26, minwidth=26, anchor="center")
         self._act_tv.pack(fill="both",expand=True,padx=4,pady=(0,4))
         self._style_tv(); self._fill_act_tree()
         self._act_tv.bind("<<TreeviewSelect>>",self._on_act)
@@ -1139,10 +1134,11 @@ class App(ctk.CTk):
                         self._tree_bonus_photos[btype] = ph
             # Store bonus info for tooltips
             self._tree_bonus_map = {}  # iid -> (label, value)
-            tv.insert("","end",iid="All",        text="   ◆   All")
-            tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
-            tv.insert("","end",iid="Harvesting", text="  ⛏  Harvesting")
-            dn = tv.insert("","end",iid="Dungeon", text="  ⚔  Dungeon", open=False)
+            # sym column — shows bonus emoji, name column stays clean
+            tv.insert("","end",iid="All",        text="  ◆  All",        values=("",))
+            tv.insert("","end",iid="Boating",    text="  ⚓  Boating",    values=("",))
+            tv.insert("","end",iid="Harvesting", text="  ⛏  Harvesting", values=("",))
+            dn = tv.insert("","end",iid="Dungeon", text="  ⚔  Dungeon",  values=("",), open=False)
             current_bonuses = self._get_current_bonuses()
             seen = {}
             for d in self.dung_data.get("dungeons",[]):
@@ -1161,17 +1157,17 @@ class App(ctk.CTk):
                     has_bonus = bonus is not None and bonus_val > 0
                     btype  = bonus.get("type","") if has_bonus else ""
                     symbol = self.BONUS_SYMBOLS.get(btype, "") if has_bonus else ""
-                    # em-space (U+2003) has consistent width — emoji wide + em-space ≈ 2 em-spaces
-                    prefix = f"{symbol} " if symbol else "  "
                     iid    = f"db_{base}"
+                    # Name in #0 (clean, no prefix), symbol in "sym" column (fixed 26px)
                     seen[base] = tv.insert(dn,"end",iid=iid,
-                                           text=f"{prefix}{base}",
+                                           text=f"   {base}",
+                                           values=(symbol,),
                                            open=False)
                     if has_bonus:
                         self._tree_bonus_map[iid] = (bonus.get("label",""), bonus.get("value",""))
-                tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
-            wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", open=False)
-            tv.insert(wn,"end",iid="wild_global", text="   ◆  Global")
+                tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}",values=("",))
+            wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", values=("",), open=False)
+            tv.insert(wn,"end",iid="wild_global", text="   ◆  Global", values=("",))
         except Exception as e:
             print(f"[TREE] _fill_act_tree error: {e}")
         finally:

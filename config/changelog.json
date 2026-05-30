@@ -5,11 +5,11 @@
     "author": "Daping",
     "changes": {
       "IMPROVEMENT": [
-        "Activities tree bonus symbols now perfectly aligned using fixed-width spacing",
-        "Bonus display now falls back to most recent available week if current week is missing"
+        "Activities tree bonus symbols now in a dedicated fixed-width column — perfect alignment guaranteed",
+        "Bonus display falls back to most recent available week if current week is missing"
       ],
       "BUG FIX": [
-        "Sanctuary and Challenger no longer show as bonus when their modifier is negative or zero",
+        "Sanctuary and Challenger no longer show as bonus when modifier is negative",
         "Guild tab restored in navigation"
       ]
     }
