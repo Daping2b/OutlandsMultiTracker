@@ -5,11 +5,11 @@
     "author": "Daping",
     "changes": {
       "IMPROVEMENT": [
-        "Activities tree now shows a unique symbol per bonus type next to dungeon names, with tooltip on hover"
+        "Activities tree now shows unique bonus symbols per dungeon with tooltip on hover — symbols aligned with tab stops"
       ],
       "BUG FIX": [
-        "Fixed alignment of All and Harvesting icons in the Activities tree",
-        "App relaunches faster after auto-update"
+        "Sanctuary and Challenger no longer show a spurious bonus value when their modifier is negative",
+        "Guild tab restored in navigation"
       ]
     }
   },

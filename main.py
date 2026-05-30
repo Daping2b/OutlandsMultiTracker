@@ -914,6 +914,7 @@ class App(ctk.CTk):
             ("Home",         "Home",         "tinkering_candelabra.png"),
             ("Log Analysis", "Log Analysis", "storageshelf.png"),
             ("Experience",   "Experience",   "poisonkit.png"),
+            ("Guild",        "Guild",        "guild.png"),
             ("How To",       "How To",       "shepherdscrook.png"),
         ]
         for key, label, ico_name in tab_defs:
@@ -931,6 +932,7 @@ class App(ctk.CTk):
         self._build_home()
         self._build_log()
         self._build_xp()
+        self._build_guild()
         self._build_howto()
         self._build_settings()
         self._show("Home")
@@ -1106,6 +1108,8 @@ class App(ctk.CTk):
                     borderwidth=0,rowheight=28,font=F_BODY)
         s.configure("Treeview.Heading",background=BG3,foreground=GOLD)
         s.map("Treeview",background=[("selected",ACCENT)])
+        # Set tab stop for emoji column alignment
+        self._act_tv.column("#0", minwidth=200)
 
     def _fill_act_tree(self):
         """Rebuild the activities tree. Safe to call multiple times."""
@@ -1138,14 +1142,20 @@ class App(ctk.CTk):
                     for k,v in current_bonuses.items():
                         if k.lower() in base.lower() or base.lower() in k.lower():
                             bonus = v; break
-                    btype  = bonus.get("type","") if bonus else ""
-                    symbol = self.BONUS_SYMBOLS.get(btype, "⭐") if bonus else ""
-                    prefix = f"{symbol} " if symbol else "   "
+                    # Only show bonus if value is meaningfully positive (not -0.0% or 0%)
+                    def _is_positive(val):
+                        try: return float(val.replace("%","").replace("+","").strip()) > 0
+                        except: return False
+                    has_bonus = bonus and _is_positive(bonus.get("value","0"))
+                    btype  = bonus.get("type","") if has_bonus else ""
+                    symbol = self.BONUS_SYMBOLS.get(btype, "") if has_bonus else ""
+                    # Use tab character for consistent alignment regardless of emoji width
+                    prefix = f"{symbol}	" if symbol else "	"
                     iid    = f"db_{base}"
                     seen[base] = tv.insert(dn,"end",iid=iid,
                                            text=f"{prefix}{base}",
                                            open=False)
-                    if bonus:
+                    if has_bonus:
                         self._tree_bonus_map[iid] = (bonus.get("label",""), bonus.get("value",""))
                 tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
             wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", open=False)
@@ -1664,6 +1674,23 @@ class App(ctk.CTk):
                 ctk.CTkLabel(row,text=text,width=w,
                              text_color=color if text==asp else TEXT,
                              font=F_BODY_B if text==asp else F_BODY).pack(side="left",padx=4,pady=3)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # GUILD
+    # ═══════════════════════════════════════════════════════════════════════════
+    def _build_guild(self):
+        page=ctk.CTkFrame(self._body,fg_color=BG,corner_radius=0)
+        self._pages["Guild"]=page
+        _,scroll,_=make_scrollable(page,bg=BG)
+        ico=load_pil("guild.png",transparent=True)
+        if ico:
+            ico=ico.resize((120,120),Image.LANCZOS)
+            ph=ImageTk.PhotoImage(ico); self._keep(ph)
+            ctk.CTkLabel(scroll,image=ph,text="",fg_color=BG).pack(pady=(40,16))
+        ctk.CTkLabel(scroll,text="Guild",font=("Georgia",28,"bold"),text_color=GOLD_LT).pack()
+        ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=80,pady=12)
+        ctk.CTkLabel(scroll,text="Coming Soon",font=("Palatino Linotype",18,"italic"),
+                     text_color=DIM2).pack(pady=8)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # HOW TO
