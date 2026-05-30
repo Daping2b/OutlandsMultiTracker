@@ -1065,11 +1065,12 @@ class App(ctk.CTk):
                     if k.lower() in base.lower() or base.lower() in k.lower():
                         bonus = v; break
                 btype = bonus.get("type","") if bonus else ""
-                tag = (f"bonus_{btype}",) if btype in self._tree_bonus_photos else ()
                 bonus_txt = f"  {bonus.get('value','')} {bonus.get('label','')}" if bonus else ""
+                img = self._tree_bonus_photos.get(btype) if btype else None
                 seen[base]=tv.insert(dn,"end",iid=f"db_{base}",
-                                     text=f"   ▸  {base}{bonus_txt}",
-                                     open=False, tags=tag)
+                                     text=f"   {base}{bonus_txt}",
+                                     image=img or "",
+                                     open=False)
             tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
         wn=tv.insert("","end",iid="Wilderness",text="  🌿  Wilderness",open=False)
         tv.insert(wn,"end",iid="wild_global",text="   ◆  Global")

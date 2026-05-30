@@ -1,31 +1,11 @@
 [
   {
-    "version": "0.55",
+    "version": "0.56",
     "date": "2026-05-30",
     "author": "Daping",
     "changes": {
       "BUG FIX": [
-        "Patch Notes now correctly display all change details per category (NEW FEATURE / IMPROVEMENT / BUG FIX)"
-      ]
-    }
-  },
-  {
-    "version": "0.54",
-    "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "BUG FIX": [
-        "Auto-update now works correctly — SSL certificate issue on Windows was preventing the download from starting"
-      ]
-    }
-  },
-  {
-    "version": "0.53",
-    "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "IMPROVEMENT": [
-        "Bonus data is now automatically fetched from GitHub at startup to ensure weekly bonuses are always up to date"
+        "Bonus icons now display correctly in the Activities tree for dungeons with an active weekly bonus"
       ]
     }
   },
