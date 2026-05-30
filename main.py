@@ -807,8 +807,7 @@ class App(ctk.CTk):
         if week in self.bonuses_db:
             return self.bonuses_db[week]
         if self.bonuses_db:
-            latest = max(self.bonuses_db.keys())
-            return self.bonuses_db[latest]
+            return self.bonuses_db[max(self.bonuses_db.keys())]
         return {}
 
     def _refresh_bonus_tree(self):
@@ -1085,9 +1084,10 @@ class App(ctk.CTk):
         left.grid(row=0,column=0,sticky="nsew",padx=(0,6)); left.pack_propagate(False)
         ctk.CTkLabel(left,text="  ✦  Activities",font=F_HEAD,text_color=GOLD).pack(pady=(12,4),anchor="w")
         ctk.CTkFrame(left,fg_color=GOLD_DK,height=1).pack(fill="x",padx=8,pady=(0,6))
-        self._act_tv=ttk.Treeview(left,show="tree",columns=("sym",),selectmode="browse")
-        self._act_tv.column("#0",   stretch=True,  minwidth=140)
-        self._act_tv.column("sym",  stretch=False, width=26, minwidth=26, anchor="center")
+        self._act_tv=ttk.Treeview(left,show="tree",columns=("name",),selectmode="browse")
+        # #0 = narrow symbol column (left), "name" = dungeon name (fills rest)
+        self._act_tv.column("#0",   width=28, minwidth=28, stretch=False, anchor="center")
+        self._act_tv.column("name", stretch=True, minwidth=120, anchor="w")
         self._act_tv.pack(fill="both",expand=True,padx=4,pady=(0,4))
         self._style_tv(); self._fill_act_tree()
         self._act_tv.bind("<<TreeviewSelect>>",self._on_act)
@@ -1134,11 +1134,13 @@ class App(ctk.CTk):
                         self._tree_bonus_photos[btype] = ph
             # Store bonus info for tooltips
             self._tree_bonus_map = {}  # iid -> (label, value)
-            # sym column — shows bonus emoji, name column stays clean
-            tv.insert("","end",iid="All",        text="  ◆  All",        values=("",))
-            tv.insert("","end",iid="Boating",    text="  ⚓  Boating",    values=("",))
-            tv.insert("","end",iid="Harvesting", text="  ⛏  Harvesting", values=("",))
-            dn = tv.insert("","end",iid="Dungeon", text="  ⚔  Dungeon",  values=("",), open=False)
+            # #0 column = symbol/icon (narrow, 28px), "name" column = label text
+            def ins(parent, iid, sym, label, **kw):
+                return tv.insert(parent,"end",iid=iid,text=sym,values=(label,),**kw)
+            ins("","All",        "◆", "All")
+            ins("","Boating",    "⚓", "Boating")
+            ins("","Harvesting", "⛏", "Harvesting")
+            dn = ins("","Dungeon","⚔", "Dungeon", open=False)
             current_bonuses = self._get_current_bonuses()
             seen = {}
             for d in self.dung_data.get("dungeons",[]):
@@ -1149,25 +1151,23 @@ class App(ctk.CTk):
                     for k,v in current_bonuses.items():
                         if k.lower() in base.lower() or base.lower() in k.lower():
                             bonus = v; break
-                    # Only show bonus if value is meaningfully positive
+                    btype = bonus.get("type","") if bonus else ""
+                    # Show symbol for positive bonuses AND for sanctuary/challenger type indicators
                     try:
                         bonus_val = float(bonus.get("value","0").replace("%","").replace("+","").strip()) if bonus else 0
                     except:
                         bonus_val = 0
-                    has_bonus = bonus is not None and bonus_val > 0
-                    btype  = bonus.get("type","") if has_bonus else ""
-                    symbol = self.BONUS_SYMBOLS.get(btype, "") if has_bonus else ""
-                    iid    = f"db_{base}"
-                    # Name in #0 (clean, no prefix), symbol in "sym" column (fixed 26px)
-                    seen[base] = tv.insert(dn,"end",iid=iid,
-                                           text=f"   {base}",
-                                           values=(symbol,),
-                                           open=False)
-                    if has_bonus:
-                        self._tree_bonus_map[iid] = (bonus.get("label",""), bonus.get("value",""))
-                tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}",values=("",))
-            wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", values=("",), open=False)
-            tv.insert(wn,"end",iid="wild_global", text="   ◆  Global", values=("",))
+                    is_type_indicator = btype in ("sanctuary","challenger")
+                    has_symbol = bonus is not None and (bonus_val > 0 or is_type_indicator)
+                    symbol = self.BONUS_SYMBOLS.get(btype,"") if has_symbol else ""
+                    iid = f"db_{base}"
+                    seen[base] = ins(dn, iid, symbol, base, open=False)
+                    if has_symbol:
+                        tip_val = bonus.get("value","") if bonus_val > 0 else ""
+                        self._tree_bonus_map[iid] = (bonus.get("label",""), tip_val)
+                ins(seen[base], f"dl_{name}", "", name)
+            wn = ins("","Wilderness","🌿","Wilderness",open=False)
+            ins(wn,"wild_global","◆","Global")
         except Exception as e:
             print(f"[TREE] _fill_act_tree error: {e}")
         finally:
