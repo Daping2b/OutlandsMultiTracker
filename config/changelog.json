@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.54",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "BUG FIX": [
+        "Auto-update now works correctly — SSL certificate issue on Windows was preventing the download from starting"
+      ]
+    }
+  },
+  {
     "version": "0.53",
     "date": "2026-05-30",
     "author": "Daping",

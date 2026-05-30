@@ -467,9 +467,13 @@ def date_row(parent, cmd_apply, cmd_all):
 def check_for_update():
     """Returns (latest_version, download_url) or (None, None)."""
     try:
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(GITHUB_API,
-              headers={"User-Agent": "OutlandsMultiTracker"})
-        with urllib.request.urlopen(req, timeout=8) as r:
+              headers={"User-Agent": "Mozilla/5.0 OutlandsMultiTracker"})
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             data = json.loads(r.read().decode())
         tag     = data.get("tag_name","").lstrip("v")
         assets  = data.get("assets",[])
@@ -496,9 +500,13 @@ def do_update(download_url, progress_cb=None):
 
     try:
         # ── Download ──────────────────────────────────────────────────────────
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(download_url,
-              headers={"User-Agent": "OutlandsMultiTracker"})
-        with urllib.request.urlopen(req, timeout=120) as r:
+              headers={"User-Agent": "Mozilla/5.0 OutlandsMultiTracker"})
+        with urllib.request.urlopen(req, timeout=120, context=ctx) as r:
             total = int(r.headers.get("Content-Length", 0))
             done = 0; chunk = 524288; last_cb = 0
             with open(tmp_zip, "wb") as f:
@@ -842,7 +850,6 @@ class App(ctk.CTk):
             ("Home",         "Home",         "tinkering_candelabra.png"),
             ("Log Analysis", "Log Analysis", "storageshelf.png"),
             ("Experience",   "Experience",   "poisonkit.png"),
-            ("Guild",        "Guild",        "guild.png"),
             ("How To",       "How To",       "shepherdscrook.png"),
         ]
         for key, label, ico_name in tab_defs:
@@ -860,7 +867,6 @@ class App(ctk.CTk):
         self._build_home()
         self._build_log()
         self._build_xp()
-        self._build_guild()
         self._build_howto()
         self._build_settings()
         self._show("Home")
@@ -947,61 +953,31 @@ class App(ctk.CTk):
                      font=("Georgia",17,"bold"),text_color=GOLD_LT,anchor="w").pack(fill="x",padx=16,pady=(14,4))
         ctk.CTkFrame(news,fg_color=GOLD_DK,height=1).pack(fill="x",padx=16,pady=(0,10))
         changelog=load_json(CONFIG_DIR/"changelog.json",[])
-        # Category colors — same gold as titles for consistency
-        CAT_COLORS = {
-            "NEW FEATURE":  GOLD_LT,
-            "BUG FIX":      GOLD_LT,
-            "IMPROVEMENT":  GOLD_LT,
-        }
-
         if not changelog:
             ctk.CTkLabel(news,text="  No changelog available.",font=("Segoe UI",13),text_color=DIM2).pack(anchor="w",padx=20,pady=8)
         else:
             for idx,entry in enumerate(changelog[:8]):
-                is_latest=(idx==0)
-                # Each entry gets its own bordered panel
-                entry_wrap=ctk.CTkFrame(news,fg_color=BORDER,corner_radius=5)
-                entry_wrap.pack(fill="x",padx=16,pady=(8,0))
-                entry_inner=ctk.CTkFrame(entry_wrap,fg_color=BG4,corner_radius=4)
-                entry_inner.pack(fill="both",expand=True,padx=1,pady=1)
-
-                # Header row: version + NEW badge + date
-                hrow=ctk.CTkFrame(entry_inner,fg_color=BG5,corner_radius=3)
-                hrow.pack(fill="x",padx=6,pady=(6,4))
-                ctk.CTkLabel(hrow,text=f"v{entry.get('version','?')}",
-                             font=("Segoe UI",14,"bold"),text_color=GOLD,
-                             width=65,anchor="w").pack(side="left",padx=8,pady=4)
+                is_latest = (idx==0)
+                vrow=ctk.CTkFrame(news,fg_color="transparent"); vrow.pack(fill="x",padx=20,pady=(10,2))
+                # Version badge
+                ver_lbl=ctk.CTkLabel(vrow,text=f"v{entry.get('version','?')}",
+                             font=("Segoe UI",14,"bold"),text_color=GOLD,width=65,anchor="w")
+                ver_lbl.pack(side="left")
+                # NEW badge for latest entry
                 if is_latest:
-                    ctk.CTkLabel(hrow,text="✦ NEW",font=("Segoe UI",11,"bold"),
+                    ctk.CTkLabel(vrow,text=" ✦ NEW",font=("Segoe UI",11,"bold"),
                                  text_color="#00dd88").pack(side="left",padx=(0,8))
-                ctk.CTkLabel(hrow,text=entry.get("date",""),font=("Segoe UI",11),
-                             text_color=DIM2).pack(side="left",padx=4)
-
-                # Changes — dict with categories or plain list
-                changes=entry.get("changes",{})
-                if isinstance(changes, dict):
-                    for cat, items in changes.items():
-                        cat_color=CAT_COLORS.get(cat,"#888888")
-                        ctk.CTkLabel(entry_inner,text=f"  {cat}",
-                                     font=("Segoe UI",11,"bold"),text_color=cat_color,
-                                     anchor="w").pack(fill="x",padx=14,pady=(4,0))
-                        for ch in items:
-                            ctk.CTkLabel(entry_inner,text=f"      •  {ch}",
-                                         font=("Segoe UI",12),text_color=TEXT,
-                                         anchor="w",wraplength=780).pack(fill="x",padx=14,pady=0)
-                else:
-                    for ch in changes:
-                        ctk.CTkLabel(entry_inner,text=f"    •  {ch}",font=("Segoe UI",12),
-                                     text_color=TEXT,anchor="w",wraplength=780).pack(fill="x",padx=14,pady=1)
-
-                # Author signature at bottom right
+                ctk.CTkLabel(vrow,text=entry.get("date",""),font=("Segoe UI",12),text_color=DIM2).pack(side="left",padx=8)
+                # Author signature in red
                 author=entry.get("author","")
                 if author:
-                    sig=ctk.CTkFrame(entry_inner,fg_color="transparent")
-                    sig.pack(fill="x",padx=8,pady=(4,6))
-                    ctk.CTkLabel(sig,text=f"— {author}",
+                    ctk.CTkLabel(vrow,text=f"— {author}",
                                  font=("Palatino Linotype",12,"bold","italic"),
                                  text_color="#cc2222").pack(side="right",padx=8)
+                for ch in entry.get("changes",[]):
+                    ctk.CTkLabel(news,text=f"    •  {ch}",font=("Segoe UI",13),
+                                 text_color=TEXT,anchor="w",wraplength=800).pack(fill="x",padx=20,pady=2)
+                ctk.CTkFrame(news,fg_color=BG5,height=1).pack(fill="x",padx=20,pady=6)
         ctk.CTkFrame(news,height=8,fg_color="transparent").pack()
         ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=60,pady=(8,20))
 
@@ -1053,25 +1029,15 @@ class App(ctk.CTk):
         s.configure("Treeview.Heading",background=BG3,foreground=GOLD)
         s.map("Treeview",background=[("selected",ACCENT)])
 
-    # Bonus type to emoji indicator
-    BONUS_EMOJI = {
-        "sanctuary":  "🛡",
-        "challenger": "💀",
-        "respawn":    "⏳",
-        "gold_loot":  "💰",
-        "experience": "✨",
-        "vendor":     "🏪",
-        "crafting":   "⚒",
-    }
-
     def _fill_act_tree(self):
         tv=self._act_tv; tv.delete(*tv.get_children())
-        # Load bonus PhotoImages for ttk tags (16x16 for tree)
+        # Load bonus icons for tree (small size)
         self._tree_bonus_photos = {}
         for btype, fname in self.BONUS_ICONS.items():
-            ph = make_photo(fname, (16,16), transparent=True)
+            ph = make_photo(fname, (14,14), transparent=True)
             if ph:
                 self._tree_bonus_photos[btype] = ph
+                tv.tag_configure(f"bonus_{btype}", image=ph)
         tv.insert("","end",iid="All",        text="  ◆  All")
         tv.insert("","end",iid="Boating",    text="  ⚓  Boating")
         tv.insert("","end",iid="Harvesting", text="  🌲  Harvesting")
@@ -1081,23 +1047,18 @@ class App(ctk.CTk):
         for d in self.dung_data.get("dungeons",[]):
             name=d["name"]; base=re.sub(r'\s+Lv-\d+$','',name).strip()
             if base not in seen:
+                # Check if this dungeon base has a bonus this week
                 bonus = None
                 for k,v in current_bonuses.items():
                     if k.lower() in base.lower() or base.lower() in k.lower():
                         bonus = v; break
                 btype = bonus.get("type","") if bonus else ""
-                if bonus and btype in self._tree_bonus_photos:
-                    ph = self._tree_bonus_photos[btype]
-                    tag = f"bi_{btype}"
-                    tv.tag_configure(tag, image=ph, foreground=GOLD_LT)
-                    seen[base]=tv.insert(dn,"end",iid=f"db_{base}",
-                                         text=f"  {base}",
-                                         open=False, tags=(tag,))
-                else:
-                    seen[base]=tv.insert(dn,"end",iid=f"db_{base}",
-                                         text=f"  {base}",
-                                         open=False)
-            tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"      {name}")
+                tag = (f"bonus_{btype}",) if btype in self._tree_bonus_photos else ()
+                bonus_txt = f"  {bonus.get('value','')} {bonus.get('label','')}" if bonus else ""
+                seen[base]=tv.insert(dn,"end",iid=f"db_{base}",
+                                     text=f"   ▸  {base}{bonus_txt}",
+                                     open=False, tags=tag)
+            tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
         wn=tv.insert("","end",iid="Wilderness",text="  🌿  Wilderness",open=False)
         tv.insert(wn,"end",iid="wild_global",text="   ◆  Global")
 
@@ -1178,9 +1139,9 @@ class App(ctk.CTk):
         ("golds",    "Golds",      "goldpile.png",                    105),
         ("doubloons","Doubloons",  "doubloons1.png",                  115),
         ("rare",     "Rare",       "arcanescroll1.png",                80),
+        ("bonus",    "Bonus",      "bonus_experience.png",             90),
         ("harvest",  "Harvest",    "hatchetiron1.png",                 95),
         ("exp",      "Exp",        "chromaticcore1.png",              110),
-        ("bonus",    "Bonus",      "bonus.png",                        70),
     ]
 
     def _draw_header(self):
@@ -1238,27 +1199,21 @@ class App(ctk.CTk):
             (f"{g:,}\n({rate(g,mins)})",   105, False),
             (f"{d:,}\n({rate(d,mins)})",   115, False),
             (f"{r}\n({rate(r,mins)})",      80, False),
+            (bonus_txt,            90, False),
             (f"{h:,}\n({rate(h,mins)})",    95, False),
             (f"{e:,.0f}\n({rate(e,mins)})",110, False),
         ]
-        for text,cw,wrap in vals:
-            ctk.CTkLabel(row,text=text,width=cw,text_color=TEXT,font=F_BODY,
+        for i,(text,cw,wrap) in enumerate(vals):
+            lbl = ctk.CTkLabel(row,text=text,width=cw,text_color=TEXT,font=F_BODY,
                          justify="center",
-                         wraplength=cw-4 if wrap else 0
-                         ).pack(side="left",padx=(g,0),pady=2)
-        # Bonus icon cell (last column)
-        bonus_cell = ctk.CTkFrame(row,fg_color="transparent",width=56,height=28)
-        bonus_cell.pack(side="left",padx=(g,0),pady=2); bonus_cell.pack_propagate(False)
-        if sess_bonus and bonus_type in self.BONUS_ICONS:
-            bph = make_photo(self.BONUS_ICONS[bonus_type],(24,24),transparent=True)
-            if bph:
-                self._photos.append(bph)
-                ico_lbl = ctk.CTkLabel(bonus_cell,image=bph,text="",fg_color="transparent")
-                ico_lbl.place(relx=0.5,rely=0.5,anchor="center")
-                self._add_tooltip(ico_lbl, f"{sess_bonus.get('label','')} {sess_bonus.get('value','')}")
-        else:
-            ctk.CTkLabel(bonus_cell,text="—",text_color=DIM,font=F_SMALL,
-                         fg_color="transparent").place(relx=0.5,rely=0.5,anchor="center")
+                         wraplength=cw-4 if wrap else 0)
+            lbl.pack(side="left",padx=(g,0),pady=2)
+            # Add bonus icon tooltip
+            if i==7 and sess_bonus and bonus_type in self.BONUS_ICONS:
+                bph = make_photo(self.BONUS_ICONS[bonus_type],(16,16),transparent=True)
+                if bph:
+                    self._photos.append(bph)
+                    self._add_tooltip(lbl, f"{sess_bonus.get('label','')} {sess_bonus.get('value','')}")
         eb=ctk.CTkButton(row,text="▶",width=30,height=30,fg_color="transparent",text_color=DIM2,hover_color=BG4,font=F_BODY)
         eb.pack(side="right",padx=6)
         detail=ctk.CTkFrame(outer,fg_color=BG,corner_radius=0); state=[False]
@@ -1580,27 +1535,6 @@ class App(ctk.CTk):
                 ctk.CTkLabel(row,text=text,width=w,
                              text_color=color if text==asp else TEXT,
                              font=F_BODY_B if text==asp else F_BODY).pack(side="left",padx=4,pady=3)
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # GUILD
-    # ═══════════════════════════════════════════════════════════════════════════
-    def _build_guild(self):
-        page=ctk.CTkFrame(self._body,fg_color=BG,corner_radius=0)
-        self._pages["Guild"]=page
-        # Center content
-        center=ctk.CTkFrame(page,fg_color="transparent")
-        center.place(relx=0.5,rely=0.5,anchor="center")
-        # Guild icon
-        guild_pil=load_pil("guild.png",transparent=True)
-        if guild_pil:
-            guild_pil=guild_pil.resize((80,80),Image.LANCZOS)
-            ph=ImageTk.PhotoImage(guild_pil); self._photos.append(ph)
-            ctk.CTkLabel(center,image=ph,text="",fg_color="transparent").pack(pady=(0,16))
-        ctk.CTkLabel(center,text="Guild",font=F_BIG,text_color=GOLD_LT).pack()
-        ctk.CTkLabel(center,text="Coming Soon",font=("Segoe UI",16,"bold"),
-                     text_color=RED).pack(pady=(6,0))
-        ctk.CTkLabel(center,text="Guild tracking features are in development.",
-                     font=F_BODY,text_color=DIM2).pack(pady=(8,0))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # HOW TO
