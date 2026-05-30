@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.55",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "BUG FIX": [
+        "Patch Notes now correctly display all change details per category (NEW FEATURE / IMPROVEMENT / BUG FIX)"
+      ]
+    }
+  },
+  {
     "version": "0.54",
     "date": "2026-05-30",
     "author": "Daping",

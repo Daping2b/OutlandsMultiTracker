@@ -974,9 +974,21 @@ class App(ctk.CTk):
                     ctk.CTkLabel(vrow,text=f"— {author}",
                                  font=("Palatino Linotype",12,"bold","italic"),
                                  text_color="#cc2222").pack(side="right",padx=8)
-                for ch in entry.get("changes",[]):
-                    ctk.CTkLabel(news,text=f"    •  {ch}",font=("Segoe UI",13),
-                                 text_color=TEXT,anchor="w",wraplength=800).pack(fill="x",padx=20,pady=2)
+                changes = entry.get("changes", {})
+                if isinstance(changes, dict):
+                    CAT_COLORS = {"NEW FEATURE": "#00dd88", "IMPROVEMENT": GOLD_LT, "BUG FIX": "#cc6644"}
+                    for cat, items in changes.items():
+                        ctk.CTkLabel(news, text=f"    {cat}",
+                                     font=("Segoe UI", 11, "bold"),
+                                     text_color=CAT_COLORS.get(cat, DIM2),
+                                     anchor="w").pack(fill="x", padx=20, pady=(4,0))
+                        for item in items:
+                            ctk.CTkLabel(news, text=f"      •  {item}", font=("Segoe UI",13),
+                                         text_color=TEXT, anchor="w", wraplength=800).pack(fill="x", padx=20, pady=1)
+                else:
+                    for ch in changes:
+                        ctk.CTkLabel(news,text=f"    •  {ch}",font=("Segoe UI",13),
+                                     text_color=TEXT,anchor="w",wraplength=800).pack(fill="x",padx=20,pady=2)
                 ctk.CTkFrame(news,fg_color=BG5,height=1).pack(fill="x",padx=20,pady=6)
         ctk.CTkFrame(news,height=8,fg_color="transparent").pack()
         ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=60,pady=(8,20))
