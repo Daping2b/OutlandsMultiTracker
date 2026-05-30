@@ -1,15 +1,16 @@
 [
   {
-    "version": "0.57",
+    "version": "0.58",
     "date": "2026-05-30",
     "author": "Daping",
     "changes": {
       "BUG FIX": [
-        "Auto-update download now retries with a fallback method if the first attempt fails",
-        "Update error message now shows the actual error instead of blank",
-        "Bonus icons in Activities tree now load and display reliably — fixed garbage collection issue",
-        "Bonus icon cache resets properly after fetching new weekly bonuses from GitHub",
-        "Bonus fetch from GitHub now uses SSL fix for consistency with the update system"
+        "Auto-update completely overhauled — fixed silent crash causing Error: None on all systems",
+        "Update error message now always shows the actual error reason",
+        "Version comparison now supports patch format (0.57.1, 0.57.2 etc.)",
+        "Downloaded zip is now verified before launching installer",
+        "Updater launch method changed for better Windows compatibility",
+        "Bonus icons in Activities tree fixed — icons now persist correctly after bonus refresh"
       ]
     }
   },

@@ -466,55 +466,71 @@ def date_row(parent, cmd_apply, cmd_all):
 # ── Auto-updater ───────────────────────────────────────────────────────────────
 def check_for_update():
     """Returns (latest_version, download_url) or (None, None)."""
+    import ssl
     try:
-        import ssl
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(GITHUB_API,
               headers={"User-Agent": "Mozilla/5.0 OutlandsMultiTracker"})
-        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
             data = json.loads(r.read().decode())
-        tag     = data.get("tag_name","").lstrip("v")
-        assets  = data.get("assets",[])
-        dl_url  = next((a["browser_download_url"] for a in assets
-                        if a["name"].endswith(".zip")), None)
+        tag    = data.get("tag_name", "").lstrip("v")
+        assets = data.get("assets", [])
+        dl_url = next((a["browser_download_url"] for a in assets
+                       if a["name"].endswith(".zip")), None)
         if tag and dl_url:
             return tag, dl_url
-    except Exception:
-        pass
+        # API responded but no zip asset found
+        print(f"[UPDATE] No zip asset found in release {tag}")
+    except Exception as e:
+        print(f"[UPDATE] check_for_update failed: {e}")
     return None, None
 
 def version_newer(remote, local):
-    """True if remote > local (semver compare)."""
+    """True if remote > local — supports 0.57, 0.57.1, 0.58 etc."""
     def parts(v):
-        try: return tuple(int(x) for x in v.split("."))
-        except: return (0,)
-    return parts(remote) > parts(local)
+        try:
+            return tuple(int(x) for x in str(v).strip().split("."))
+        except:
+            return (0,)
+    r, l = parts(remote), parts(local)
+    # Pad to same length for fair comparison
+    maxlen = max(len(r), len(l))
+    r = r + (0,) * (maxlen - len(r))
+    l = l + (0,) * (maxlen - len(l))
+    return r > l
 
 def do_update(download_url, progress_cb=None):
     """Download zip then launch Updater.exe which handles extraction independently."""
+    import ssl
     tmp_zip     = BASE_DIR / "_update.zip"
     updater_exe = BASE_DIR / "Updater.exe"
-    exe_name    = Path(sys.executable).name
+    exe_name    = "OutlandsMultiTracker.exe"  # hardcoded — never rely on sys.executable name
 
+    # Pre-flight checks
     if not download_url:
-        raise ValueError("No download URL provided")
+        raise ValueError("No download URL provided by GitHub API")
     if not updater_exe.exists():
         raise FileNotFoundError(f"Updater.exe not found at {updater_exe}")
 
-    # ── Download ──────────────────────────────────────────────────────────────
-    import ssl, importlib
+    # Clean up any leftover zip
+    try:
+        if tmp_zip.exists(): tmp_zip.unlink()
+    except Exception as e:
+        raise RuntimeError(f"Cannot clean up old update file: {e}")
+
+    # ── Download with 2 attempts (different SSL contexts) ─────────────────────
     headers = {"User-Agent": "Mozilla/5.0 OutlandsMultiTracker"}
 
-    def _download_urllib(url, dest, progress_cb):
+    def _try_download(url, dest, verify_ssl):
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        ctx.verify_mode = ssl.CERT_NONE if not verify_ssl else ssl.CERT_REQUIRED
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=120, context=ctx) as r:
             total = int(r.headers.get("Content-Length", 0))
-            done = 0; chunk = 524288; last_cb = 0
+            done = 0; chunk = 65536; last_cb = 0
             with open(dest, "wb") as f:
                 while True:
                     buf = r.read(chunk)
@@ -524,29 +540,17 @@ def do_update(download_url, progress_cb=None):
                         progress_cb(done, total, "Downloading...")
                         last_cb = done
             if progress_cb: progress_cb(total or done, total or done, "Downloading...")
-
-    def _download_requests(url, dest, progress_cb):
-        requests = importlib.import_module("requests")
-        with requests.get(url, stream=True, timeout=120, verify=False,
-                          headers=headers) as r:
-            r.raise_for_status()
-            total = int(r.headers.get("Content-Length", 0))
-            done = 0; last_cb = 0
-            with open(dest, "wb") as f:
-                for chunk in r.iter_content(524288):
-                    if not chunk: continue
-                    f.write(chunk); done += len(chunk)
-                    if progress_cb and total and (done - last_cb) > total * 0.02:
-                        progress_cb(done, total, "Downloading...")
-                        last_cb = done
-            if progress_cb: progress_cb(total or done, total or done, "Downloading...")
+        return done
 
     last_err = None
-    for attempt, downloader in enumerate([_download_urllib, _download_requests], 1):
+    for attempt, verify in enumerate([(False), (True)], 1):
         try:
-            if progress_cb: progress_cb(0, 1, f"Downloading... (attempt {attempt})")
-            downloader(download_url, tmp_zip, progress_cb)
+            if progress_cb: progress_cb(0, 1, f"Downloading... (attempt {attempt}/2)")
+            size = _try_download(download_url, tmp_zip, verify)
+            if size == 0:
+                raise RuntimeError("Downloaded file is empty (0 bytes)")
             last_err = None
+            print(f"[UPDATE] Download OK — {size/1024:.1f} KB")
             break
         except Exception as e:
             last_err = e
@@ -555,17 +559,28 @@ def do_update(download_url, progress_cb=None):
             except: pass
 
     if last_err:
-        raise RuntimeError(f"Download failed after 2 attempts: {last_err}")
+        raise RuntimeError(f"Download failed: {last_err}")
+
+    # Verify zip is valid before launching updater
+    import zipfile
+    if not zipfile.is_zipfile(str(tmp_zip)):
+        try: tmp_zip.unlink(missing_ok=True)
+        except: pass
+        raise RuntimeError("Downloaded file is not a valid zip archive")
 
     if progress_cb: progress_cb(0, 1, "Launching installer...")
 
     # ── Launch Updater.exe ────────────────────────────────────────────────────
-    subprocess.Popen(
-        [str(updater_exe), str(tmp_zip), str(BASE_DIR), exe_name],
-        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_CONSOLE,
-        close_fds=True,
-        cwd=str(BASE_DIR)
-    )
+    try:
+        subprocess.Popen(
+            [str(updater_exe), str(tmp_zip), str(BASE_DIR), exe_name],
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+            cwd=str(BASE_DIR)
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to launch Updater.exe: {e}")
+
     return True
 
 
@@ -705,10 +720,12 @@ class App(ctk.CTk):
             self.after(0, lambda: modal.update_progress(done, total, msg))
         _update_err = [None]
         def run():
+            ok = False
             try:
                 ok = do_update(url, progress_cb)
             except Exception as e:
-                ok = False; _update_err[0] = e
+                ok = False
+                _update_err[0] = e
                 print(f"[UPDATE] Fatal error: {e}")
             if ok:
                 self.after(0, self.destroy)
