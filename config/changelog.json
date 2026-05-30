@@ -5,10 +5,11 @@
     "author": "Daping",
     "changes": {
       "IMPROVEMENT": [
-        "Activities tree now shows unique bonus symbols per dungeon with tooltip on hover — symbols aligned with tab stops"
+        "Activities tree bonus symbols now perfectly aligned using fixed-width spacing",
+        "Bonus display now falls back to most recent available week if current week is missing"
       ],
       "BUG FIX": [
-        "Sanctuary and Challenger no longer show a spurious bonus value when their modifier is negative",
+        "Sanctuary and Challenger no longer show as bonus when their modifier is negative or zero",
         "Guild tab restored in navigation"
       ]
     }

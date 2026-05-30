@@ -779,11 +779,24 @@ class App(ctk.CTk):
                 data = json.loads(r.read().decode())
             if data:
                 self.bonuses_db = data
-                self._tree_bonus_photos = {}  # force icon reload
+                self._tree_bonus_photos = {}
                 save_json(CONFIG_DIR/"bonuses.json", data)
+                print(f"[BONUSES] Updated — keys: {list(data.keys())}")
                 self.after(0, self._refresh_bonus_tree)
         except Exception as e:
             print(f"[BONUSES] Fetch failed: {e}")
+
+    def _get_current_bonuses_data(self):
+        """Return bonuses for current week, falling back to most recent available week."""
+        week = self._get_week_key()
+        if week in self.bonuses_db:
+            return self.bonuses_db[week]
+        # Fallback: return most recent week
+        if self.bonuses_db:
+            latest = max(self.bonuses_db.keys())
+            print(f"[BONUSES] Week {week} not found, using {latest}")
+            return self.bonuses_db[latest]
+        return {}
 
     def _get_week_key(self, dt=None):
         if dt is None: dt = datetime.now()
@@ -803,7 +816,7 @@ class App(ctk.CTk):
         return None
 
     def _get_current_bonuses(self):
-        return self.bonuses_db.get(self._get_week_key(), {})
+        return self._get_current_bonuses_data()
 
     def _refresh_bonus_tree(self):
         self._fill_act_tree()
@@ -1108,8 +1121,6 @@ class App(ctk.CTk):
                     borderwidth=0,rowheight=28,font=F_BODY)
         s.configure("Treeview.Heading",background=BG3,foreground=GOLD)
         s.map("Treeview",background=[("selected",ACCENT)])
-        # Set tab stop for emoji column alignment
-        self._act_tv.column("#0", minwidth=200)
 
     def _fill_act_tree(self):
         """Rebuild the activities tree. Safe to call multiple times."""
@@ -1142,15 +1153,16 @@ class App(ctk.CTk):
                     for k,v in current_bonuses.items():
                         if k.lower() in base.lower() or base.lower() in k.lower():
                             bonus = v; break
-                    # Only show bonus if value is meaningfully positive (not -0.0% or 0%)
-                    def _is_positive(val):
-                        try: return float(val.replace("%","").replace("+","").strip()) > 0
-                        except: return False
-                    has_bonus = bonus and _is_positive(bonus.get("value","0"))
+                    # Only show bonus if value is meaningfully positive
+                    try:
+                        bonus_val = float(bonus.get("value","0").replace("%","").replace("+","").strip()) if bonus else 0
+                    except:
+                        bonus_val = 0
+                    has_bonus = bonus is not None and bonus_val > 0
                     btype  = bonus.get("type","") if has_bonus else ""
                     symbol = self.BONUS_SYMBOLS.get(btype, "") if has_bonus else ""
-                    # Use tab character for consistent alignment regardless of emoji width
-                    prefix = f"{symbol}	" if symbol else "	"
+                    # em-space (U+2003) has consistent width — emoji wide + em-space ≈ 2 em-spaces
+                    prefix = f"{symbol} " if symbol else "  "
                     iid    = f"db_{base}"
                     seen[base] = tv.insert(dn,"end",iid=iid,
                                            text=f"{prefix}{base}",
