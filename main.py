@@ -498,18 +498,24 @@ def do_update(download_url, progress_cb=None):
     updater_exe = BASE_DIR / "Updater.exe"
     exe_name    = Path(sys.executable).name
 
-    try:
-        # ── Download ──────────────────────────────────────────────────────────
-        import ssl
+    if not download_url:
+        raise ValueError("No download URL provided")
+    if not updater_exe.exists():
+        raise FileNotFoundError(f"Updater.exe not found at {updater_exe}")
+
+    # ── Download ──────────────────────────────────────────────────────────────
+    import ssl, importlib
+    headers = {"User-Agent": "Mozilla/5.0 OutlandsMultiTracker"}
+
+    def _download_urllib(url, dest, progress_cb):
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(download_url,
-              headers={"User-Agent": "Mozilla/5.0 OutlandsMultiTracker"})
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=120, context=ctx) as r:
             total = int(r.headers.get("Content-Length", 0))
             done = 0; chunk = 524288; last_cb = 0
-            with open(tmp_zip, "wb") as f:
+            with open(dest, "wb") as f:
                 while True:
                     buf = r.read(chunk)
                     if not buf: break
@@ -517,27 +523,50 @@ def do_update(download_url, progress_cb=None):
                     if progress_cb and total and (done - last_cb) > total * 0.02:
                         progress_cb(done, total, "Downloading...")
                         last_cb = done
-            if progress_cb: progress_cb(total, total, "Downloading...")
+            if progress_cb: progress_cb(total or done, total or done, "Downloading...")
 
-        if progress_cb: progress_cb(0, 1, "Launching installer...")
+    def _download_requests(url, dest, progress_cb):
+        requests = importlib.import_module("requests")
+        with requests.get(url, stream=True, timeout=120, verify=False,
+                          headers=headers) as r:
+            r.raise_for_status()
+            total = int(r.headers.get("Content-Length", 0))
+            done = 0; last_cb = 0
+            with open(dest, "wb") as f:
+                for chunk in r.iter_content(524288):
+                    if not chunk: continue
+                    f.write(chunk); done += len(chunk)
+                    if progress_cb and total and (done - last_cb) > total * 0.02:
+                        progress_cb(done, total, "Downloading...")
+                        last_cb = done
+            if progress_cb: progress_cb(total or done, total or done, "Downloading...")
 
-        # ── Launch Updater.exe — it handles everything after we close ─────────
-        if not updater_exe.exists():
-            raise FileNotFoundError(f"Updater.exe not found at {updater_exe}")
+    last_err = None
+    for attempt, downloader in enumerate([_download_urllib, _download_requests], 1):
+        try:
+            if progress_cb: progress_cb(0, 1, f"Downloading... (attempt {attempt})")
+            downloader(download_url, tmp_zip, progress_cb)
+            last_err = None
+            break
+        except Exception as e:
+            last_err = e
+            print(f"[UPDATE] Download attempt {attempt} failed: {e}")
+            try: tmp_zip.unlink(missing_ok=True)
+            except: pass
 
-        subprocess.Popen(
-            [str(updater_exe), str(tmp_zip), str(BASE_DIR), exe_name],
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_CONSOLE,
-            close_fds=True,
-            cwd=str(BASE_DIR)
-        )
-        return True
+    if last_err:
+        raise RuntimeError(f"Download failed after 2 attempts: {last_err}")
 
-    except Exception as e:
-        print(f"[UPDATE] Error: {e}")
-        try: tmp_zip.unlink(missing_ok=True)
-        except: pass
-        return False
+    if progress_cb: progress_cb(0, 1, "Launching installer...")
+
+    # ── Launch Updater.exe ────────────────────────────────────────────────────
+    subprocess.Popen(
+        [str(updater_exe), str(tmp_zip), str(BASE_DIR), exe_name],
+        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_CONSOLE,
+        close_fds=True,
+        cwd=str(BASE_DIR)
+    )
+    return True
 
 
 # ── Update progress modal ─────────────────────────────────────────────────────
@@ -680,11 +709,13 @@ class App(ctk.CTk):
                 ok = do_update(url, progress_cb)
             except Exception as e:
                 ok = False; _update_err[0] = e
+                print(f"[UPDATE] Fatal error: {e}")
             if ok:
                 self.after(0, self.destroy)
             else:
+                err_msg = str(_update_err[0]) if _update_err[0] else "Unknown error — check internet connection or try downloading manually."
                 self.after(0, lambda: modal.destroy())
-                self.after(100, lambda err=str(_update_err[0]): messagebox.showerror("Update failed", f"Error:\n{err}"))
+                self.after(100, lambda m=err_msg: messagebox.showerror("Update failed", f"Error:\n{m}"))
         threading.Thread(target=run, daemon=True).start()
 
     # ── Bonus helpers ──────────────────────────────────────────────────────────
@@ -1065,12 +1096,11 @@ class App(ctk.CTk):
                     if k.lower() in base.lower() or base.lower() in k.lower():
                         bonus = v; break
                 btype = bonus.get("type","") if bonus else ""
+                tag = (f"bonus_{btype}",) if btype in self._tree_bonus_photos else ()
                 bonus_txt = f"  {bonus.get('value','')} {bonus.get('label','')}" if bonus else ""
-                img = self._tree_bonus_photos.get(btype) if btype else None
                 seen[base]=tv.insert(dn,"end",iid=f"db_{base}",
-                                     text=f"   {base}{bonus_txt}",
-                                     image=img or "",
-                                     open=False)
+                                     text=f"   ▸  {base}{bonus_txt}",
+                                     open=False, tags=tag)
             tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
         wn=tv.insert("","end",iid="Wilderness",text="  🌿  Wilderness",open=False)
         tv.insert(wn,"end",iid="wild_global",text="   ◆  Global")

@@ -1,11 +1,12 @@
 [
   {
-    "version": "0.56",
+    "version": "0.57",
     "date": "2026-05-30",
     "author": "Daping",
     "changes": {
       "BUG FIX": [
-        "Bonus icons now display correctly in the Activities tree for dungeons with an active weekly bonus"
+        "Auto-update download now retries with a fallback method if the first attempt fails — fixes persistent update errors on some systems",
+        "Update error message now shows the actual error instead of blank"
       ]
     }
   },
