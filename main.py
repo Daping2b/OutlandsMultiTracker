@@ -188,6 +188,41 @@ def icon(name, size=SZ_NAV):
     if ph: _icon_photos.append(ph)
     return ph
 
+# ── Items to skip entirely (consumables, tools, non-loot) ─────────────────────
+_SKIP_KEYWORDS = [
+    # Identification wands
+    "identification wand",
+    # Potions (all levels: lesser, regular, greater, lethal etc.)
+    "heal potion", "cure potion", "refresh potion", "agility potion",
+    "strength potion", "explosion potion", "poison potion",
+    "magic resist potion", "nightsight potion", "total refresh",
+    "greater heal", "greater cure", "greater agility", "greater strength",
+    "greater explosion", "greater magic resist", "lethal poison potion",
+    "lesser heal", "lesser cure", "lesser poison", "lesser explosion",
+    # Consumables
+    "bandage", "veterinary supplies",
+    # Tools
+    "pickaxe", "shovel", "hatchet", "fishing pole", "sewing kit",
+    "tinker's tools", "mortar and pestle", "scribe's pen", "scissors",
+    " saw", "tongs", "skillet", "rolling pin", "smoothing plane",
+    "scorp", "spyglass", "lockpick",
+]
+
+def should_skip_item(desc):
+    """Return True if item should be excluded from loot tracking."""
+    d = desc.lower().strip()
+    # Skip identification wands
+    if "identification wand" in d:
+        return True
+    # Skip exceptional crooks
+    if "crook" in d and "exceptional" in d:
+        return True
+    # Skip all other keywords
+    for kw in _SKIP_KEYWORDS:
+        if kw in d:
+            return True
+    return False
+
 # ── Categorisation ─────────────────────────────────────────────────────────────
 def categorise_item(desc):
     d = desc.lower().strip()
@@ -246,7 +281,7 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
         # Use filename only (not full path) so moving the folder doesn't break history
         fid=fpath.name
         if fid in known_ids: continue
-        known_ids.add(fid)
+        # Don't mark as known yet — only mark after finding at least one complete session
         try: lines=Path(fpath).read_text(encoding="utf-8",errors="replace").splitlines()
         except: continue
         ptl=[]
@@ -291,6 +326,7 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
                 lm=re.search(r'● \d+ (.+?)(?:\s*:\s*(\d+))?$',msg)
                 if lm:
                     iname=lm.group(1).strip(); qty=int(lm.group(2)) if lm.group(2) else 1
+                    if should_skip_item(iname): continue
                     cat=categorise_item(iname)
                     cur["loots"].setdefault(cat,{})
                     cur["loots"][cat][iname]=cur["loots"][cat].get(iname,0)+qty
@@ -321,6 +357,10 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
                 for asp,(cv,mx,(fv,fmx)) in cur["aspects"].items():
                     gained[asp]=(cv-fv) if cv>=fv else (fmx-fv)+cv
                 cur["aspects_gained"]=gained; sessions.append(cur); cur=None; asp_first={}
+        # Mark file as known only if at least one complete session was found
+        # This allows re-parsing files that previously had no complete sessions
+        if any(True for s in sessions if s.get("start") and s.get("end")):
+            known_ids.add(fid)
     return sessions, xp_events
 
 # ── Metrics ────────────────────────────────────────────────────────────────────
@@ -586,12 +626,33 @@ def do_update(download_url, progress_cb=None):
         except: pass
         raise RuntimeError("Downloaded file is not a valid zip archive")
 
+    if progress_cb: progress_cb(0, 1, "Preparing update...")
+
+    # ── Pre-extract zip while app is still running ────────────────────────────────
+    # Eliminates extraction time from the "dark" period after app closes
+    import zipfile as _zf, shutil as _sh
+    pre_extract_dir = BASE_DIR / "_update_pre"
+    pre_extracted = False
+    try:
+        if pre_extract_dir.exists():
+            _sh.rmtree(pre_extract_dir, ignore_errors=True)
+        pre_extract_dir.mkdir()
+        with _zf.ZipFile(str(tmp_zip), "r") as z:
+            z.extractall(pre_extract_dir)
+        pre_extracted = True
+        print(f"[UPDATE] Pre-extracted to {pre_extract_dir}")
+    except Exception as e:
+        print(f"[UPDATE] Pre-extract failed ({e}), updater will extract normally")
+
     if progress_cb: progress_cb(0, 1, "Launching installer...")
 
     # ── Launch Updater.exe ────────────────────────────────────────────────────
     try:
+        args = [str(updater_exe), str(tmp_zip), str(BASE_DIR), exe_name]
+        if pre_extracted:
+            args += ["--pre-extracted", str(pre_extract_dir)]
         subprocess.Popen(
-            [str(updater_exe), str(tmp_zip), str(BASE_DIR), exe_name],
+            args,
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
             close_fds=True,
             cwd=str(BASE_DIR)
@@ -600,6 +661,7 @@ def do_update(download_url, progress_cb=None):
         raise RuntimeError(f"Failed to launch Updater.exe: {e}")
 
     return True
+
 
 
 # ── Update progress modal ─────────────────────────────────────────────────────
@@ -1465,24 +1527,53 @@ class App(ctk.CTk):
             if expand and not ost[0]: itf.pack(fill="x",padx=2,pady=(0,4)); arr.configure(text="▼"); ost[0]=True
             elif not expand and ost[0]: itf.pack_forget(); arr.configure(text="▶"); ost[0]=False
 
+
     # ── Delete ─────────────────────────────────────────────────────────────────
     def _delete_selected(self):
         sel=self._selected()
         if not sel: messagebox.showwarning("Nothing selected","Select sessions first."); return
-        choice=messagebox.askquestion("Delete sessions",
-            f"Delete {len(sel)} session(s)?\n\n"
-            "YES = This session only (can reload from logs)\n"
-            "NO = Permanently (won't reload)",icon="warning")
-        if choice=="yes":
+        modal=tk.Toplevel(self)
+        modal.title("Delete Sessions")
+        modal.resizable(False,False)
+        modal.attributes("-topmost",True)
+        modal.grab_set()
+        modal.configure(bg=BG)
+        modal.protocol("WM_DELETE_WINDOW", modal.destroy)
+        modal.update_idletasks()
+        w,h=360,160
+        x=self.winfo_rootx()+(self.winfo_width()-w)//2
+        y=self.winfo_rooty()+(self.winfo_height()-h)//2
+        modal.geometry(f"{w}x{h}+{x}+{y}")
+        ctk.CTkLabel(modal,text=f"Delete {len(sel)} session(s)?",
+                     font=("Segoe UI",14,"bold"),text_color=TEXT,fg_color=BG).pack(pady=(20,4))
+        ctk.CTkLabel(modal,text="This Session  —  removable by reloading logs\nPermanent  —  cannot be recovered",
+                     font=("Segoe UI",11),text_color=DIM2,fg_color=BG,justify="center").pack(pady=(0,16))
+        btn_row=ctk.CTkFrame(modal,fg_color=BG); btn_row.pack()
+        result=[None]
+        def do(r): result[0]=r; modal.destroy()
+        ctk.CTkButton(btn_row,text="This Session",width=105,height=34,
+                      fg_color=ACCENT2,text_color=TEXT,hover_color=BG4,
+                      font=("Segoe UI",12),corner_radius=5,
+                      command=lambda:do("session")).pack(side="left",padx=6)
+        ctk.CTkButton(btn_row,text="Permanent",width=105,height=34,
+                      fg_color="#8b2020",text_color="#ffffff",hover_color="#a03030",
+                      font=("Segoe UI",12),corner_radius=5,
+                      command=lambda:do("permanent")).pack(side="left",padx=6)
+        ctk.CTkButton(btn_row,text="Cancel",width=85,height=34,
+                      fg_color=BG3,text_color=DIM2,hover_color=BG4,
+                      font=("Segoe UI",12),corner_radius=5,
+                      command=lambda:do("cancel")).pack(side="left",padx=6)
+        modal.wait_window()
+        if result[0]=="session":
             ids=set(id(s) for s in sel)
             self.sessions=[s for s in self.sessions if id(s) not in ids]
             self._refresh()
-        else:
-            if messagebox.askyesno("Confirm permanent delete",f"Permanently delete {len(sel)} session(s)?",icon="warning"):
-                to_del=set(s.get("start","") for s in sel)
-                self.sessions=[s for s in self.sessions if s.get("start","") not in to_del]
-                self.sess_db["sessions"]=self._ser_sess(self.sessions)
-                save_json(SESSIONS_F,self.sess_db); self._refresh()
+        elif result[0]=="permanent":
+            to_del=set(s.get("start","") for s in sel)
+            self.sessions=[s for s in self.sessions if s.get("start","") not in to_del]
+            self.sess_db["sessions"]=self._ser_sess(self.sessions)
+            save_json(SESSIONS_F,self.sess_db); self._refresh()
+
 
     # ── Load logs ──────────────────────────────────────────────────────────────
     def _load_logs(self):

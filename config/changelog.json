@@ -1,5 +1,20 @@
 [
   {
+    "version": "0.62",
+    "date": "2026-05-31",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Delete sessions now offers 3 options: This Session, Permanent, or Cancel"
+      ],
+      "IMPROVEMENT": [
+        "Update installation is now significantly faster — zip is extracted in the background before the app closes",
+        "Log loading now detects new journal files created after a previous load",
+        "Potions, tools, bandages, identification wands and other consumables are no longer tracked in loot"
+      ]
+    }
+  },
+  {
     "version": "0.61",
     "date": "2026-05-31",
     "author": "Daping",
