@@ -1,27 +1,28 @@
 [
   {
+    "version": "0.59",
+    "date": "2026-05-30",
+    "author": "Daping",
+    "changes": {
+      "BUG FIX": [
+        "Stability pass — fixed multiple crashes, race conditions and code inconsistencies"
+      ]
+    }
+  },
+  {
     "version": "0.60",
     "date": "2026-05-30",
     "author": "Daping",
     "changes": {
       "NEW FEATURE": [
-        "Ossuary Lv-4 location now properly mapped — sessions in this area are correctly detected"
+        "Ossuary Lv-4 location now properly mapped"
       ],
       "IMPROVEMENT": [
         "Auto-update: app closes instantly when patching",
-        "Weekly bonuses now fetched via GitHub API — always up to date instantly"
-      ]
-    }
-  },
-  {
-    "version": "0.59",
-    "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "IMPROVEMENT": [
-        "Activities tree bonus symbols displayed at end of dungeon name with tooltip on hover",
-        "Sanctuary and Challenger dungeons now always show their type symbol",
-        "Bonus display falls back to most recent week if current week is not yet available"
+        "Weekly bonuses now fetched via GitHub API — always up to date",
+        "Bonus symbols displayed at end of dungeon name with tooltip on hover",
+        "Sanctuary and Challenger dungeons always show their type symbol",
+        "Bonus display falls back to most recent week if current week is missing"
       ],
       "BUG FIX": [
         "Guild tab restored in navigation"

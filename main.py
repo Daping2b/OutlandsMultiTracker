@@ -767,22 +767,20 @@ class App(ctk.CTk):
     }
 
     def _fetch_bonuses(self):
-        """Download latest bonuses.json from GitHub API (bypasses CDN cache)."""
+        """Download latest bonuses.json via GitHub API (bypasses CDN cache)."""
         try:
             import urllib.request as _ur, ssl, base64
-            # GitHub API bypasses CDN cache — always returns latest version
             url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/config/bonuses.json"
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
             req = _ur.Request(url, headers={
                 "User-Agent": "Mozilla/5.0 OutlandsMultiTracker",
-                "Accept": "application/vnd.github.v3+json"
+                "Accept":     "application/vnd.github.v3+json"
             })
             with _ur.urlopen(req, timeout=10, context=ctx) as r:
                 api_resp = json.loads(r.read().decode())
-            # API returns base64-encoded content
-            content_b64 = api_resp.get("content", "").replace("\n", "")
+            content_b64 = api_resp.get("content","").replace("\n","")
             data = json.loads(base64.b64decode(content_b64).decode("utf-8"))
             if data:
                 self.bonuses_db = data
@@ -791,7 +789,6 @@ class App(ctk.CTk):
                 self.after(0, self._refresh_bonus_tree)
         except Exception as e:
             print(f"[BONUSES] Fetch failed: {e}")
-
 
     def _get_week_key(self, dt=None):
         if dt is None: dt = datetime.now()
@@ -811,7 +808,12 @@ class App(ctk.CTk):
         return None
 
     def _get_current_bonuses(self):
-        return self.bonuses_db.get(self._get_week_key(), {})
+        week = self._get_week_key()
+        if week in self.bonuses_db:
+            return self.bonuses_db[week]
+        if self.bonuses_db:
+            return self.bonuses_db[max(self.bonuses_db.keys())]
+        return {}
 
     def _refresh_bonus_tree(self):
         self._fill_act_tree()
@@ -922,6 +924,7 @@ class App(ctk.CTk):
             ("Home",         "Home",         "tinkering_candelabra.png"),
             ("Log Analysis", "Log Analysis", "storageshelf.png"),
             ("Experience",   "Experience",   "poisonkit.png"),
+            ("Guild",        "Guild",        "guild.png"),
             ("How To",       "How To",       "shepherdscrook.png"),
         ]
         for key, label, ico_name in tab_defs:
@@ -939,6 +942,7 @@ class App(ctk.CTk):
         self._build_home()
         self._build_log()
         self._build_xp()
+        self._build_guild()
         self._build_howto()
         self._build_settings()
         self._show("Home")
@@ -1146,15 +1150,22 @@ class App(ctk.CTk):
                     for k,v in current_bonuses.items():
                         if k.lower() in base.lower() or base.lower() in k.lower():
                             bonus = v; break
-                    btype  = bonus.get("type","") if bonus else ""
-                    symbol = self.BONUS_SYMBOLS.get(btype, "⭐") if bonus else ""
-                    prefix = f"{symbol} " if symbol else "   "
+                    try:
+                        bonus_val = float(bonus.get("value","0").replace("%","").replace("+","").strip()) if bonus else 0
+                    except:
+                        bonus_val = 0
+                    btype = bonus.get("type","") if bonus else ""
+                    is_type_indicator = btype in ("sanctuary","challenger")
+                    has_symbol = bonus is not None and (bonus_val > 0 or is_type_indicator)
+                    symbol = self.BONUS_SYMBOLS.get(btype,"") if has_symbol else ""
                     iid    = f"db_{base}"
+                    label  = f"   {base}  {symbol}" if symbol else f"   {base}"
                     seen[base] = tv.insert(dn,"end",iid=iid,
-                                           text=f"{prefix}{base}",
+                                           text=label,
                                            open=False)
-                    if bonus:
-                        self._tree_bonus_map[iid] = (bonus.get("label",""), bonus.get("value",""))
+                    if has_symbol:
+                        tip_val = bonus.get("value","") if bonus_val > 0 else ""
+                        self._tree_bonus_map[iid] = (bonus.get("label",""), tip_val)
                 tv.insert(seen[base],"end",iid=f"dl_{name}",text=f"        {name}")
             wn = tv.insert("","end",iid="Wilderness", text="  🌿  Wilderness", open=False)
             tv.insert(wn,"end",iid="wild_global", text="   ◆  Global")
@@ -1672,6 +1683,23 @@ class App(ctk.CTk):
                 ctk.CTkLabel(row,text=text,width=w,
                              text_color=color if text==asp else TEXT,
                              font=F_BODY_B if text==asp else F_BODY).pack(side="left",padx=4,pady=3)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # GUILD
+    # ═══════════════════════════════════════════════════════════════════════════
+    def _build_guild(self):
+        page=ctk.CTkFrame(self._body,fg_color=BG,corner_radius=0)
+        self._pages["Guild"]=page
+        _,scroll,_=make_scrollable(page,bg=BG)
+        ico=load_pil("guild.png",transparent=True)
+        if ico:
+            ico=ico.resize((120,120),Image.LANCZOS)
+            ph=ImageTk.PhotoImage(ico); self._keep(ph)
+            ctk.CTkLabel(scroll,image=ph,text="",fg_color=BG).pack(pady=(40,16))
+        ctk.CTkLabel(scroll,text="Guild",font=("Georgia",28,"bold"),text_color=GOLD_LT).pack()
+        ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=80,pady=12)
+        ctk.CTkLabel(scroll,text="Coming Soon",font=("Palatino Linotype",18,"italic"),
+                     text_color=DIM2).pack(pady=8)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # HOW TO
