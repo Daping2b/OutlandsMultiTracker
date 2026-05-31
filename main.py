@@ -1031,6 +1031,10 @@ class App(ctk.CTk):
         self.deiconify()
         self.lift()
         self.focus_force()
+        # Ensure Log Analysis starts on All / All Time
+        self._act_f  = "All"
+        self._char_f = "All"
+        self.after(100, self._all_time_log)
         self.update()
 
     def _show(self,name):

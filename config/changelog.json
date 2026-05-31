@@ -8,8 +8,9 @@
         "Delete sessions now offers 3 options: This Session, Permanent, or Cancel"
       ],
       "IMPROVEMENT": [
-        "Update process fully optimized — app relaunches immediately after patching with no visible delay",
-        "Potions, tools, bandages, identification wands and other consumables are no longer tracked in loot",
+        "Log Analysis now opens on All Activities, All Players and All Time automatically",
+        "Update process fully optimized — app relaunches immediately after patching",
+        "Potions, tools, bandages, identification wands and other consumables no longer tracked in loot",
         "Empty journal files are now skipped automatically"
       ],
       "BUG FIX": [
