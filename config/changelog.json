@@ -8,12 +8,12 @@
         "Delete sessions now offers 3 options: This Session, Permanent, or Cancel"
       ],
       "IMPROVEMENT": [
-        "Update installation is now significantly faster — zip is extracted in the background before the app closes",
+        "Update process fully optimized — app relaunches immediately after patching with no visible delay",
         "Potions, tools, bandages, identification wands and other consumables are no longer tracked in loot",
-        "Empty journal files are now skipped — no more issues when loading logs while the game is still running"
+        "Empty journal files are now skipped automatically"
       ],
       "BUG FIX": [
-        "Log loading now correctly detects all sessions — a critical bug was causing most sessions to be skipped"
+        "Log loading now correctly detects all sessions across all journal files"
       ]
     }
   },

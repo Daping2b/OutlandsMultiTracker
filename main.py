@@ -284,6 +284,7 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
         # Skip empty files — game keeps journal locked/empty while running
         if fpath.stat().st_size == 0: continue
         sessions_before=len(sessions)
+        # Don't mark as known yet — only mark after finding at least one complete session
         try: lines=Path(fpath).read_text(encoding="utf-8",errors="replace").splitlines()
         except: continue
         ptl=[]
@@ -655,7 +656,7 @@ def do_update(download_url, progress_cb=None):
             args += ["--pre-extracted", str(pre_extract_dir)]
         subprocess.Popen(
             args,
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            creationflags=subprocess.DETACHED_PROCESS,
             close_fds=True,
             cwd=str(BASE_DIR)
         )

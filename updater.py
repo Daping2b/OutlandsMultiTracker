@@ -1,14 +1,13 @@
 """
-Outlands Multi Tracker — Updater v3
-Standalone exe that replaces the main app while it's closed.
-Usage: Updater.exe <zip_path> <install_dir> <exe_name> [--pre-extracted <pre_dir>]
+Outlands Multi Tracker — Updater v4
+Optimized: pre-extracted support, os.replace atomic, relaunch before cleanup.
+Usage: Updater.exe <zip_path> <install_dir> <exe_name> [--pre-extracted <dir>]
 """
-import sys, os, zipfile, shutil, time, subprocess
+import sys, os, zipfile, shutil, time, subprocess, threading
 from pathlib import Path
 
 def main():
     if len(sys.argv) < 4:
-        print("Usage: Updater.exe <zip_path> <install_dir> <exe_name> [--pre-extracted <dir>]")
         sys.exit(1)
 
     zip_path    = Path(sys.argv[1])
@@ -18,57 +17,45 @@ def main():
     tmp_dir     = install_dir / "_update_tmp"
     main_exe    = install_dir / exe_name
 
-    # Check for pre-extracted flag
-    pre_extracted_dir = None
+    # Pre-extracted dir support
+    pre_dir = None
     if "--pre-extracted" in sys.argv:
         idx = sys.argv.index("--pre-extracted")
         if idx + 1 < len(sys.argv):
-            pre_extracted_dir = Path(sys.argv[idx + 1])
-            if not pre_extracted_dir.exists():
-                pre_extracted_dir = None
+            p = Path(sys.argv[idx + 1])
+            if p.exists(): pre_dir = p
 
-    print(f"[Updater] zip={zip_path}")
-    print(f"[Updater] dir={install_dir}")
-    print(f"[Updater] exe={exe_name}")
-    print(f"[Updater] pre-extracted={pre_extracted_dir}")
-
-    # ── Wait for exe lock (polling 50ms, timeout 3s) ──────────────────────────
+    # ── Wait for exe lock — 50ms polling, 3s max ──────────────────────────────
     for i in range(60):
         try:
             test = main_exe.with_suffix(".tmp_test")
             main_exe.rename(test)
             test.rename(main_exe)
-            print(f"[Updater] Exe unlocked after {i * 50}ms")
             break
         except:
             time.sleep(0.05)
-    else:
-        print("[Updater] WARNING: exe may still be locked, proceeding anyway...")
 
-    # ── Use pre-extracted dir or extract zip ──────────────────────────────────
-    if pre_extracted_dir and pre_extracted_dir.exists():
-        print("[Updater] Using pre-extracted files — skipping extraction")
-        src_root = pre_extracted_dir
+    # ── Get source files ──────────────────────────────────────────────────────
+    if pre_dir and pre_dir.exists():
+        src_root = pre_dir
+        need_cleanup_zip = True
     else:
-        print("[Updater] Extracting zip...")
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
         tmp_dir.mkdir()
-        with zipfile.ZipFile(zip_path, "r") as z:
+        with zipfile.ZipFile(str(zip_path), "r") as z:
             z.extractall(tmp_dir)
         src_root = tmp_dir
+        need_cleanup_zip = True
 
-    # Find source root inside extracted dir
     entries = list(src_root.iterdir())
     src = entries[0] if len(entries) == 1 and entries[0].is_dir() else src_root
-    print(f"[Updater] Source root: {src}")
 
-    # ── Copy files — protected: data/ and settings.json ──────────────────────
+    # ── Copy files — os.replace() atomic, skip protected ─────────────────────
     skip_dirs  = {"data"}
     skip_files = {"config/settings.json", "config\\settings.json"}
+    errors     = []
 
-    print("[Updater] Copying files...")
-    errors = []
     for item in src.rglob("*"):
         rel     = item.relative_to(src)
         rel_str = str(rel).replace(os.sep, "/")
@@ -84,33 +71,34 @@ def main():
             try:
                 os.replace(str(item), str(dest))
                 break
-            except PermissionError as e:
+            except PermissionError:
                 if attempt < 2:
                     time.sleep(0.1)
                 else:
                     try: shutil.copyfile(str(item), str(dest))
                     except Exception as e2: errors.append(f"{rel}: {e2}")
+            except Exception as e:
+                try: shutil.copyfile(str(item), str(dest))
+                except: errors.append(f"{rel}: {e}")
+                break
 
-    if errors:
-        print(f"[Updater] {len(errors)} file(s) could not be copied:")
-        for e in errors: print(f"  {e}")
-
-    # ── Write flag then cleanup ───────────────────────────────────────────────
+    # ── Write flag ────────────────────────────────────────────────────────────
     flag_path.write_text("1", encoding="utf-8")
-    print("[Updater] Flag written.")
 
-    # Cleanup
-    for d in [tmp_dir, pre_extracted_dir, install_dir / "_update_pre"]:
-        if d and d.exists():
-            try: shutil.rmtree(d, ignore_errors=True)
-            except: pass
-    try: zip_path.unlink()
-    except: pass
-
-    # ── Relaunch immediately ──────────────────────────────────────────────────
-    print(f"[Updater] Launching {main_exe}")
+    # ── Relaunch IMMEDIATELY — before cleanup ─────────────────────────────────
     subprocess.Popen([str(main_exe)], cwd=str(install_dir))
-    print("[Updater] Done!")
+
+    # ── Cleanup in background thread — doesn't delay relaunch ─────────────────
+    def cleanup():
+        for d in [tmp_dir, pre_dir, install_dir / "_update_pre"]:
+            if d and d.exists():
+                try: shutil.rmtree(d, ignore_errors=True)
+                except: pass
+        if need_cleanup_zip:
+            try: zip_path.unlink()
+            except: pass
+    threading.Thread(target=cleanup, daemon=True).start()
+    time.sleep(0.2)  # Give cleanup thread a moment
     sys.exit(0)
 
 if __name__ == "__main__":
