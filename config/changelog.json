@@ -9,8 +9,11 @@
       ],
       "IMPROVEMENT": [
         "Update installation is now significantly faster — zip is extracted in the background before the app closes",
-        "Log loading now detects new journal files created after a previous load",
-        "Potions, tools, bandages, identification wands and other consumables are no longer tracked in loot"
+        "Potions, tools, bandages, identification wands and other consumables are no longer tracked in loot",
+        "Empty journal files are now skipped — no more issues when loading logs while the game is still running"
+      ],
+      "BUG FIX": [
+        "Log loading now correctly detects all sessions — a critical bug was causing most sessions to be skipped"
       ]
     }
   },

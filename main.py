@@ -281,7 +281,9 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
         # Use filename only (not full path) so moving the folder doesn't break history
         fid=fpath.name
         if fid in known_ids: continue
-        # Don't mark as known yet — only mark after finding at least one complete session
+        # Skip empty files — game keeps journal locked/empty while running
+        if fpath.stat().st_size == 0: continue
+        sessions_before=len(sessions)
         try: lines=Path(fpath).read_text(encoding="utf-8",errors="replace").splitlines()
         except: continue
         ptl=[]
@@ -359,7 +361,7 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
                 cur["aspects_gained"]=gained; sessions.append(cur); cur=None; asp_first={}
         # Mark file as known only if at least one complete session was found
         # This allows re-parsing files that previously had no complete sessions
-        if any(True for s in sessions if s.get("start") and s.get("end")):
+        if len(sessions) > sessions_before:
             known_ids.add(fid)
     return sessions, xp_events
 
