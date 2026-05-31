@@ -243,7 +243,8 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
     for fpath in sorted(log_files):
         done+=1
         if progress_cb: progress_cb(done, total, fpath.name)
-        fid=str(fpath)
+        # Use filename only (not full path) so moving the folder doesn't break history
+        fid=fpath.name
         if fid in known_ids: continue
         known_ids.add(fid)
         try: lines=Path(fpath).read_text(encoding="utf-8",errors="replace").splitlines()
@@ -293,13 +294,25 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
                     cat=categorise_item(iname)
                     cur["loots"].setdefault(cat,{})
                     cur["loots"][cat][iname]=cur["loots"][cat].get(iname,0)+qty
-            xp_m=re.search(r'\((\w+) Aspect ([\d,\.]+)/([\d,]+) xp\)',msg)
+            xp_m=re.search(r'\(([\w ]+?) Aspect ([\d,\.]+)/([\d,]+) xp\)',msg)
             if xp_m:
                 asp=xp_m.group(1); xp_cur=float(xp_m.group(2).replace(",","")); xp_max=float(xp_m.group(3).replace(",",""))
                 player=cur.get("player","")
                 xp_events.append({"ts":ts,"player":player,"aspect":asp,"xp_cur":xp_cur,"xp_max":xp_max})
                 asp_first.setdefault(asp,(xp_cur,xp_max))
                 cur["aspects"][asp]=(xp_cur,xp_max,asp_first[asp])
+            # Parse gold/doubloons from bank deposits (happen during session or after END)
+            if author=="System":
+                gm=re.search(r'You deposit ([\d,]+) gold into your bank',msg)
+                if gm and cur:
+                    amt=int(gm.group(1).replace(",",""))
+                    cur["loots"].setdefault("Gold & Currency",{})
+                    cur["loots"]["Gold & Currency"]["gold coins"]=cur["loots"]["Gold & Currency"].get("gold coins",0)+amt
+                dm=re.search(r'You deposit ([\d,]+) doubloons into your bank',msg)
+                if dm and cur:
+                    amt=int(dm.group(1).replace(",",""))
+                    cur["loots"].setdefault("Gold & Currency",{})
+                    cur["loots"]["Gold & Currency"]["doubloons"]=cur["loots"]["Gold & Currency"].get("doubloons",0)+amt
             if is_razor and ("SESSION END" in msg or "SESSION : ENDING" in msg):
                 cur["end"]=ts
                 p=get_player(ts)
@@ -312,7 +325,9 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
 
 # ── Metrics ────────────────────────────────────────────────────────────────────
 def dur_min(s):
-    if s.get("end") and s.get("start"): return max(1,(s["end"]-s["start"]).total_seconds()/60)
+    if s.get("end") and s.get("start"):
+        secs=(s["end"]-s["start"]).total_seconds()
+        return max(0.1, secs/60)  # min 0.1 to avoid division by zero
     return 1
 def s_gold(s):    return sum(q for c,it in s.get("loots",{}).items() if c=="Gold & Currency" for n,q in it.items() if "gold"     in n.lower())
 def s_doub(s):    return sum(q for c,it in s.get("loots",{}).items() if c=="Gold & Currency" for n,q in it.items() if "doubloon" in n.lower())
@@ -1481,7 +1496,9 @@ class App(ctk.CTk):
         def progress_cb(done,total,fname):
             self.after(0,lambda:modal.update_progress(done,total,fname))
         def do_load():
-            known=set(self.sess_db.get("known_files",[]))
+            raw_known=self.sess_db.get("known_files",[])
+            # Migrate: strip absolute paths to filename only
+            known=set(Path(f).name if (os.sep in f or "/" in f) else f for f in raw_known)
             new_s,new_x=parse_logs(files,self.dung_data,self.wild_data,known,progress_cb)
             self.sessions.extend(new_s); self.xp_events.extend(new_x)
             self.sess_db["known_files"]=list(known)

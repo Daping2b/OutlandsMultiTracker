@@ -1,5 +1,20 @@
 [
   {
+    "version": "0.61",
+    "date": "2026-05-31",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Gold and Doubloons from bank deposits are now captured — no more missing gold/doubloons in sessions"
+      ],
+      "IMPROVEMENT": [
+        "Log loading now works correctly even when the game folder has been moved or the app reinstalled",
+        "Session duration now accurately reflects real time — no artificial minimum",
+        "XP tracking now supports multi-word aspect names"
+      ]
+    }
+  },
+  {
     "version": "0.59",
     "date": "2026-05-30",
     "author": "Daping",
