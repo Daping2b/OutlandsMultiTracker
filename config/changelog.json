@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.64",
+    "date": "2026-05-31",
+    "author": "Daping",
+    "changes": {
+      "NEW FEATURE": [
+        "Update panel — a floating notification in the bottom-right corner shows download progress silently in the background, with a Restart button when ready"
+      ],
+      "IMPROVEMENT": [
+        "Log loading is now dramatically faster — files without OMT sessions are remembered and never reparsed",
+        "Update download now happens silently without interrupting your session",
+        "Minimise the update panel to a small icon and restore it anytime"
+      ],
+      "BUG FIX": [
+        "Fixed critical bug causing all 500+ log files to be reparsed on every Load Logs"
+      ]
+    }
+  },
+  {
     "version": "0.62",
     "date": "2026-05-31",
     "author": "Daping",

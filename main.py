@@ -281,9 +281,8 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
         # Use filename only (not full path) so moving the folder doesn't break history
         fid=fpath.name
         if fid in known_ids: continue
-        # Skip empty files — game keeps journal locked/empty while running
-        if fpath.stat().st_size == 0: continue
-        sessions_before=len(sessions)
+        if fpath.stat().st_size == 0: continue  # Skip empty — game locks file while running
+        sessions_before = len(sessions)
         # Don't mark as known yet — only mark after finding at least one complete session
         try: lines=Path(fpath).read_text(encoding="utf-8",errors="replace").splitlines()
         except: continue
@@ -360,10 +359,12 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
                 for asp,(cv,mx,(fv,fmx)) in cur["aspects"].items():
                     gained[asp]=(cv-fv) if cv>=fv else (fmx-fv)+cv
                 cur["aspects_gained"]=gained; sessions.append(cur); cur=None; asp_first={}
-        # Mark file as known only if at least one complete session was found
-        # This allows re-parsing files that previously had no complete sessions
-        if len(sessions) > sessions_before:
-            known_ids.add(fid)
+        # Mark ALL non-empty files as known after processing.
+        # Files with no OMT sessions won't be reparsed next time.
+        # Only empty files (0 bytes, skipped above) stay unknown so they're retried.
+        known_ids.add(fid)
+        # But if THIS file produced new complete sessions, note it
+        _ = len(sessions) > sessions_before  # sessions_before set above
     return sessions, xp_events
 
 # ── Metrics ────────────────────────────────────────────────────────────────────
@@ -562,27 +563,18 @@ def version_newer(remote, local):
     l = l + (0,) * (maxlen - len(l))
     return r > l
 
-def do_update(download_url, progress_cb=None):
-    """Download zip then launch Updater.exe which handles extraction independently."""
-    import ssl
-    tmp_zip     = BASE_DIR / "_update.zip"
-    updater_exe = BASE_DIR / "Updater.exe"
-    exe_name    = "OutlandsMultiTracker.exe"  # hardcoded — never rely on sys.executable name
-
-    # Pre-flight checks
+def download_update(download_url, progress_cb=None):
+    """Download + pre-extract zip. Returns pre_extract_dir or None.
+    Runs in background thread — app stays responsive during download."""
+    import ssl, zipfile, shutil
+    tmp_zip = BASE_DIR / "_update.zip"
+    headers = {"User-Agent": "Mozilla/5.0 OutlandsMultiTracker"}
     if not download_url:
-        raise ValueError("No download URL provided by GitHub API")
-    if not updater_exe.exists():
-        raise FileNotFoundError(f"Updater.exe not found at {updater_exe}")
-
-    # Clean up any leftover zip
+        raise ValueError("No download URL provided")
     try:
         if tmp_zip.exists(): tmp_zip.unlink()
     except Exception as e:
-        raise RuntimeError(f"Cannot clean up old update file: {e}")
-
-    # ── Download with 2 attempts (different SSL contexts) ─────────────────────
-    headers = {"User-Agent": "Mozilla/5.0 OutlandsMultiTracker"}
+        raise RuntimeError(f"Cannot clean old zip: {e}")
 
     def _try_download(url, dest, verify_ssl):
         ctx = ssl.create_default_context()
@@ -604,100 +596,59 @@ def do_update(download_url, progress_cb=None):
         return done
 
     last_err = None
-    for attempt, verify in enumerate([(False), (True)], 1):
+    for verify in [False, True]:
         try:
-            if progress_cb: progress_cb(0, 1, f"Downloading... (attempt {attempt}/2)")
             size = _try_download(download_url, tmp_zip, verify)
-            if size == 0:
-                raise RuntimeError("Downloaded file is empty (0 bytes)")
-            last_err = None
-            print(f"[UPDATE] Download OK — {size/1024:.1f} KB")
-            break
+            if size == 0: raise RuntimeError("Downloaded file is empty")
+            last_err = None; break
         except Exception as e:
             last_err = e
-            print(f"[UPDATE] Download attempt {attempt} failed: {e}")
             try: tmp_zip.unlink(missing_ok=True)
             except: pass
-
     if last_err:
         raise RuntimeError(f"Download failed: {last_err}")
-
-    # Verify zip is valid before launching updater
-    import zipfile
     if not zipfile.is_zipfile(str(tmp_zip)):
         try: tmp_zip.unlink(missing_ok=True)
         except: pass
-        raise RuntimeError("Downloaded file is not a valid zip archive")
+        raise RuntimeError("Not a valid zip archive")
 
-    if progress_cb: progress_cb(0, 1, "Preparing update...")
-
-    # ── Pre-extract zip while app is still running ────────────────────────────────
-    # Eliminates extraction time from the "dark" period after app closes
-    import zipfile as _zf, shutil as _sh
-    pre_extract_dir = BASE_DIR / "_update_pre"
-    pre_extracted = False
+    # Pre-extract while app still running — eliminates extraction delay
+    if progress_cb: progress_cb(0, 1, "Preparing...")
+    pre_dir = BASE_DIR / "_update_pre"
     try:
-        if pre_extract_dir.exists():
-            _sh.rmtree(pre_extract_dir, ignore_errors=True)
-        pre_extract_dir.mkdir()
-        with _zf.ZipFile(str(tmp_zip), "r") as z:
-            z.extractall(pre_extract_dir)
-        pre_extracted = True
-        print(f"[UPDATE] Pre-extracted to {pre_extract_dir}")
+        if pre_dir.exists(): shutil.rmtree(pre_dir, ignore_errors=True)
+        pre_dir.mkdir()
+        with zipfile.ZipFile(str(tmp_zip), "r") as z:
+            z.extractall(pre_dir)
+        return pre_dir
     except Exception as e:
-        print(f"[UPDATE] Pre-extract failed ({e}), updater will extract normally")
+        print(f"[UPDATE] Pre-extract failed: {e}")
+        return None
 
+def launch_updater(pre_dir=None):
+    """Launch Updater.exe immediately. Call after download_update()."""
+    updater_exe = BASE_DIR / "Updater.exe"
+    tmp_zip     = BASE_DIR / "_update.zip"
+    exe_name    = "OutlandsMultiTracker.exe"
+    if not updater_exe.exists():
+        raise FileNotFoundError(f"Updater.exe not found")
+    args = [str(updater_exe), str(tmp_zip), str(BASE_DIR), exe_name]
+    if pre_dir and pre_dir.exists():
+        args += ["--pre-extracted", str(pre_dir)]
+    subprocess.Popen(args, creationflags=subprocess.DETACHED_PROCESS,
+                     close_fds=True, cwd=str(BASE_DIR))
+
+def do_update(download_url, progress_cb=None):
+    """Legacy wrapper — kept for compatibility."""
+    pre_dir = download_update(download_url, progress_cb)
     if progress_cb: progress_cb(0, 1, "Launching installer...")
-
-    # ── Launch Updater.exe ────────────────────────────────────────────────────
-    try:
-        args = [str(updater_exe), str(tmp_zip), str(BASE_DIR), exe_name]
-        if pre_extracted:
-            args += ["--pre-extracted", str(pre_extract_dir)]
-        subprocess.Popen(
-            args,
-            creationflags=subprocess.DETACHED_PROCESS,
-            close_fds=True,
-            cwd=str(BASE_DIR)
-        )
-    except Exception as e:
-        raise RuntimeError(f"Failed to launch Updater.exe: {e}")
-
+    launch_updater(pre_dir)
     return True
 
 
 
 # ── Update progress modal ─────────────────────────────────────────────────────
-class UpdateModal(tk.Toplevel):
-    def __init__(self, parent, version):
-        super().__init__(parent)
-        self.title("Updating...")
-        self.configure(bg=BG); self.resizable(False,False)
-        self.grab_set(); self.protocol("WM_DELETE_WINDOW", lambda: None)
-        w,h=480,180
-        px=parent.winfo_x()+parent.winfo_width()//2-w//2
-        py=parent.winfo_y()+parent.winfo_height()//2-h//2
-        self.geometry(f"{w}x{h}+{px}+{py}")
-        border=tk.Frame(self,bg=GOLD,bd=2); border.pack(fill="both",expand=True,padx=2,pady=2)
-        inner=tk.Frame(border,bg=BG); inner.pack(fill="both",expand=True)
-        tk.Label(inner,text=f"Updating to v{version}",bg=BG,fg=GOLD_LT,
-                 font=("Georgia",14,"bold")).pack(pady=(16,4))
-        self._lbl=tk.Label(inner,text="Connecting...",bg=BG,fg=DIM2,
-                           font=("Segoe UI",11)); self._lbl.pack(pady=2)
-        self._pct=tk.Label(inner,text="",bg=BG,fg=TEXT,
-                           font=("Segoe UI",11)); self._pct.pack()
-        bar_frame=tk.Frame(inner,bg=BG4,height=14,width=420)
-        bar_frame.pack(pady=8,padx=20); bar_frame.pack_propagate(False)
-        self._fill=tk.Frame(bar_frame,bg=GOLD,height=14)
-        self._fill.place(x=0,y=0,relheight=1,width=0); self._bar_w=420
-
-    def update_progress(self,done,total,msg=""):
-        pct=done/max(1,total); fw=int(self._bar_w*pct)
-        self._fill.place(x=0,y=0,relheight=1,width=fw)
-        self._lbl.configure(text=msg[:60])
-        if total>1:
-            self._pct.configure(text=f"{done/1024/1024:.1f} / {total/1024/1024:.1f} MB  ({int(pct*100)}%)")
-        self.update_idletasks()
+# UpdateModal replaced by floating update panel (_show_update_panel in App)
 
 # ── Loading modal ──────────────────────────────────────────────────────────────
 class LoadingModal(tk.Toplevel):
@@ -791,32 +742,36 @@ class App(ctk.CTk):
 
     # ── Auto-update ────────────────────────────────────────────────────────────
     def _check_update(self):
+        """Check for update silently — if found, start background download."""
         latest, url = check_for_update()
         if latest and version_newer(latest, APP_VERSION):
-            self.after(0, lambda: self._prompt_update(latest, url))
+            self.after(0, lambda: self._start_bg_download(latest, url))
 
-    def _prompt_update(self, version, url):
-        # Show update modal and run update automatically
-        modal = UpdateModal(self, version)
-        self.update_idletasks()
+    def _start_bg_download(self, version, url):
+        """Download silently in background. Show floating panel with progress."""
+        self._upd_version = version
+        self._upd_pre_dir = None
+        self._upd_ready   = False
+        self._show_update_panel(version)
         def progress_cb(done, total, msg):
-            self.after(0, lambda: modal.update_progress(done, total, msg))
-        _update_err = [None]
+            self.after(0, lambda d=done, t=total, m=msg: self._upd_panel_progress(d, t, m))
         def run():
-            ok = False
             try:
-                ok = do_update(url, progress_cb)
+                pre_dir = download_update(url, progress_cb)
+                self._upd_pre_dir = pre_dir
+                self.after(0, self._upd_panel_ready)
             except Exception as e:
-                ok = False
-                _update_err[0] = e
-                print(f"[UPDATE] Fatal error: {e}")
-            if ok:
-                self.after(0, lambda: os._exit(0))
-            else:
-                err_msg = str(_update_err[0]) if _update_err[0] else "Unknown error — check internet connection or try downloading manually."
-                self.after(0, lambda: modal.destroy())
-                self.after(100, lambda m=err_msg: messagebox.showerror("Update failed", f"Error:\n{m}"))
+                print(f"[UPDATE] Background download failed: {e}")
+                self.after(0, lambda m=str(e): self._upd_panel_error(m))
         threading.Thread(target=run, daemon=True).start()
+
+    def _do_restart_and_update(self):
+        """User clicked Restart — launch updater then exit immediately."""
+        try:
+            launch_updater(getattr(self, "_upd_pre_dir", None))
+            self.after(50, lambda: os._exit(0))
+        except Exception as e:
+            messagebox.showerror("Update failed", f"Could not launch updater:\n{e}")
 
     # ── Bonus helpers ──────────────────────────────────────────────────────────
     BONUS_ICONS = {
@@ -969,6 +924,87 @@ class App(ctk.CTk):
         return splash
 
     # ── Window ─────────────────────────────────────────────────────────────────
+    # ── Floating update panel ──────────────────────────────────────────────────
+    def _show_update_panel(self, version):
+        """Create or show the floating update panel (bottom-right, all pages)."""
+        if hasattr(self, "_upd_panel") and self._upd_panel.winfo_exists():
+            self._upd_panel.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
+            if hasattr(self, "_upd_mini") and self._upd_mini.winfo_exists():
+                self._upd_mini.place_forget()
+            return
+        panel = ctk.CTkFrame(self, fg_color=BG2, border_width=1,
+                             border_color=GOLD_DK, corner_radius=8, width=250)
+        self._upd_panel = panel
+        hdr = ctk.CTkFrame(panel, fg_color="transparent")
+        hdr.pack(fill="x", padx=10, pady=(10,2))
+        ctk.CTkLabel(hdr, text=f"⬇  Update v{version}",
+                     font=("Segoe UI",12,"bold"), text_color=GOLD_LT,
+                     fg_color="transparent").pack(side="left")
+        ctk.CTkButton(hdr, text="×", width=22, height=22, font=("Segoe UI",13),
+                      fg_color="transparent", text_color=DIM2, hover_color=BG4,
+                      command=self._hide_update_panel).pack(side="right")
+        self._upd_status_lbl = ctk.CTkLabel(panel, text="Downloading...",
+                                             font=("Segoe UI",11), text_color=DIM2,
+                                             fg_color="transparent")
+        self._upd_status_lbl.pack(padx=10, pady=(0,4))
+        bar_bg = ctk.CTkFrame(panel, fg_color=BG4, height=8, corner_radius=4)
+        bar_bg.pack(fill="x", padx=10, pady=(0,4))
+        bar_bg.pack_propagate(False)
+        self._upd_bar_fill = ctk.CTkFrame(bar_bg, fg_color=GOLD, height=8,
+                                          corner_radius=4, width=0)
+        self._upd_bar_fill.place(x=0, y=0, relheight=1, width=0)
+        self._upd_bar_bg = bar_bg
+        self._upd_pct_lbl = ctk.CTkLabel(panel, text="", font=("Segoe UI",10),
+                                          text_color=DIM2, fg_color="transparent")
+        self._upd_pct_lbl.pack(pady=(0,4))
+        self._upd_restart_btn = ctk.CTkButton(
+            panel, text="⟳  Restart to Update", width=210, height=32,
+            fg_color=GOLD, text_color="#050505", hover_color=GOLD_LT,
+            font=("Segoe UI",12,"bold"), corner_radius=6,
+            command=self._do_restart_and_update)
+        ctk.CTkFrame(panel, fg_color="transparent", height=4).pack()
+        panel.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
+        self._upd_mini = ctk.CTkButton(
+            self, text="⬇", width=36, height=36, font=("Segoe UI",16),
+            fg_color=GOLD, text_color="#050505", hover_color=GOLD_LT,
+            corner_radius=18, command=lambda: self._show_update_panel(version))
+
+    def _hide_update_panel(self):
+        if hasattr(self, "_upd_panel") and self._upd_panel.winfo_exists():
+            self._upd_panel.place_forget()
+        if hasattr(self, "_upd_mini") and self._upd_mini.winfo_exists():
+            self._upd_mini.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
+
+    def _upd_panel_progress(self, done, total, msg):
+        if not hasattr(self, "_upd_bar_fill"): return
+        try:
+            pct = done / max(1, total)
+            bar_w = self._upd_bar_bg.winfo_width()
+            self._upd_bar_fill.place(x=0, y=0, relheight=1, width=max(4, int(bar_w * pct)))
+            self._upd_status_lbl.configure(text=msg[:40])
+            if total > 1:
+                self._upd_pct_lbl.configure(
+                    text=f"{done/1024/1024:.1f} / {total/1024/1024:.1f} MB  ({int(pct*100)}%)")
+        except Exception: pass
+
+    def _upd_panel_ready(self):
+        if not hasattr(self, "_upd_status_lbl"): return
+        try:
+            self._upd_status_lbl.configure(text="Ready to install ✓", text_color="#80c080")
+            self._upd_pct_lbl.configure(text="")
+            bar_w = self._upd_bar_bg.winfo_width()
+            self._upd_bar_fill.configure(fg_color="#80c080")
+            self._upd_bar_fill.place(x=0, y=0, relheight=1, width=bar_w)
+            self._upd_restart_btn.pack(padx=10, pady=(0,10))
+        except Exception: pass
+
+    def _upd_panel_error(self, msg):
+        if not hasattr(self, "_upd_status_lbl"): return
+        try:
+            self._upd_status_lbl.configure(text=f"⚠ {msg[:50]}", text_color="#cc4444")
+            self._upd_pct_lbl.configure(text="")
+        except Exception: pass
+
     def _build(self):
         splash = self._show_splash()
         self.geometry("1440x920"); self.minsize(1100,720)
@@ -1031,7 +1067,7 @@ class App(ctk.CTk):
         self.deiconify()
         self.lift()
         self.focus_force()
-        # Ensure Log Analysis starts on All / All Time
+        # Start Log Analysis on All / All Time
         self._act_f  = "All"
         self._char_f = "All"
         self.after(100, self._all_time_log)
