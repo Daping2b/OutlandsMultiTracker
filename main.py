@@ -703,11 +703,11 @@ class App(ctk.CTk):
             self.after(800, self._first_run)
         # Check for updates — skip if just updated (flag file present)
         _flag = BASE_DIR / "_just_updated"
-        if _flag.exists():
-            try: _flag.unlink()
-            except: pass
-        else:
-            threading.Thread(target=self._check_update, daemon=True).start()
+        try:
+            if _flag.exists(): _flag.unlink()
+        except: pass
+        # Always check for update at startup
+        threading.Thread(target=self._check_update, daemon=True).start()
         threading.Thread(target=self._fetch_bonuses, daemon=True).start()
     # ── Serialise ──────────────────────────────────────────────────────────────
     def _ser_sess(self,ss):
@@ -978,10 +978,13 @@ class App(ctk.CTk):
                     req = _ur.Request(
                         "https://discord.com/api/webhooks/1510977027895984149/85LKfte18fOibmEbrLEo4OkLcVEvjR57NeTSlHywsKaluLAlzV92vrK4Oc4s0dp_RU1S",
                         data=payload,
-                        headers={"Content-Type":"application/json"},
+                        headers={
+                            "Content-Type": "application/json",
+                            "User-Agent": "OMT-Feedback/1.0"
+                        },
                         method="POST")
                     with _ur.urlopen(req, timeout=10, context=ctx) as r:
-                        ok = r.status in (200, 204)
+                        ok = r.status in (200, 204, 201)
                     if ok:
                         self.after(0, lambda: (
                             status_lbl.configure(text="✓ Feedback sent! Thank you.", text_color="#80c080"),
@@ -1071,10 +1074,13 @@ class App(ctk.CTk):
     # ── Floating update panel ──────────────────────────────────────────────────
     def _show_update_panel(self, version):
         """Create or show the floating update panel (bottom-right, all pages)."""
+        # If already exists and visible with restart btn packed — just re-show
         if hasattr(self, "_upd_panel") and self._upd_panel.winfo_exists():
             self._upd_panel.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
             if hasattr(self, "_upd_mini") and self._upd_mini.winfo_exists():
                 self._upd_mini.place_forget()
+            # Force re-render to ensure restart btn is visible if ready
+            self.update_idletasks()
             return
         panel = ctk.CTkFrame(self, fg_color=BG2, border_width=1,
                              border_color=GOLD_DK, corner_radius=8, width=250)
@@ -1136,11 +1142,22 @@ class App(ctk.CTk):
         try:
             self._upd_status_lbl.configure(text="Ready to install ✓", text_color="#80c080")
             self._upd_pct_lbl.configure(text="")
-            bar_w = self._upd_bar_bg.winfo_width()
             self._upd_bar_fill.configure(fg_color="#80c080")
+            # Force render before reading dimensions
+            self.update_idletasks()
+            bar_w = self._upd_bar_bg.winfo_width()
+            if bar_w < 10: bar_w = 220  # fallback if not yet rendered
             self._upd_bar_fill.place(x=0, y=0, relheight=1, width=bar_w)
+            # Unpack first to avoid duplicate pack
+            try: self._upd_restart_btn.pack_forget()
+            except: pass
             self._upd_restart_btn.pack(padx=10, pady=(0,10))
-        except Exception: pass
+            # Ensure panel is visible
+            if hasattr(self, "_upd_panel") and self._upd_panel.winfo_exists():
+                self._upd_panel.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
+                self._upd_panel.lift()
+        except Exception as e:
+            print(f"[UPD] panel_ready error: {e}")
 
     def _upd_panel_error(self, msg):
         if not hasattr(self, "_upd_status_lbl"): return
