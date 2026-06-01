@@ -916,14 +916,6 @@ class App(ctk.CTk):
             b.grid(row=0, column=i, padx=(0,6) if i<2 else 0)
             type_btns[label] = b
 
-        # Version
-        ctk.CTkLabel(scroll_frame, text="App version", font=F_BODY, text_color=DIM2,
-                     anchor="w").pack(fill="x", pady=(0,6))
-        version_entry = ctk.CTkEntry(scroll_frame, placeholder_text=f"e.g. {APP_VERSION}",
-                                     height=36, font=F_BODY)
-        version_entry.pack(fill="x", pady=(0,12))
-        version_entry.insert(0, APP_VERSION)
-
         # Description
         ctk.CTkLabel(scroll_frame, text="Description", font=F_BODY, text_color=DIM2,
                      anchor="w").pack(fill="x", pady=(0,6))
@@ -945,12 +937,11 @@ class App(ctk.CTk):
 
         def send():
             ftype   = type_var.get()
-            version = version_entry.get().strip()
+            version = APP_VERSION
             desc    = desc_box.get("1.0", "end").strip()
             pseudo  = pseudo_entry.get().strip() or "Anonymous"
-            if not ftype:   status_lbl.configure(text="⚠ Please select a type.", text_color="#cc4444"); return
-            if not version: status_lbl.configure(text="⚠ Please enter the version.", text_color="#cc4444"); return
-            if not desc:    status_lbl.configure(text="⚠ Please add a description.", text_color="#cc4444"); return
+            if not ftype: status_lbl.configure(text="⚠ Please select a type.", text_color="#cc4444"); return
+            if not desc:  status_lbl.configure(text="⚠ Please add a description.", text_color="#cc4444"); return
 
             send_btn.configure(state="disabled", text="Sending...")
             status_lbl.configure(text="", text_color=DIM2)
