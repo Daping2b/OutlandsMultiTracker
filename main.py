@@ -117,6 +117,16 @@ ASPECT_COLORS = {
     "War":       "#cc6633",   # orange-brown
     "Water":     "#5588cc",   # blue
 }
+BONUS_SYMBOLS = {
+    "sanctuary":  "🛡️",
+    "challenger": "💀",
+    "respawn":    "⚡",
+    "gold_loot":  "💰",
+    "experience": "⭐",
+    "vendor":     "🪙",
+    "crafting":   "🔨",
+}
+
 CAT_ICONS = {
     "Gold & Currency":"💰","Unidentified Items":"📜","Maps":"🗺",
     "Logs":"🪵","Ores":"⛏","Ingots":"🔩","Boards":"🪚","Leather":"🐾",
@@ -750,6 +760,51 @@ class App(ctk.CTk):
         except Exception as e:
             print(f"[UPDATE] Check failed: {e}")
 
+    # ── Bonuses ────────────────────────────────────────────────────────────────
+    def _fetch_bonuses(self):
+        """Fetch bonuses.json from GitHub API (bypasses CDN cache). Runs in daemon thread."""
+        import urllib.request, urllib.error, json as _json, base64 as _b64
+        api_url = (
+            f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}"
+            f"/contents/config/bonuses.json"
+        )
+        try:
+            req = urllib.request.Request(api_url, headers={"User-Agent": "OMT/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = _json.loads(r.read().decode())
+            content = _b64.b64decode(data["content"]).decode("utf-8")
+            bonuses = _json.loads(content)
+            if bonuses:
+                self.bonuses_db = bonuses
+                save_json(CONFIG_DIR / "bonuses.json", bonuses)
+                self.after(0, self._refresh_act_tree)
+                print("[BONUS] Fetched from GitHub API OK")
+        except Exception as e:
+            print(f"[BONUS] Fetch failed: {e}")
+
+    def _get_current_bonuses(self):
+        """Return bonus dict for the current week. Fallback to most recent week."""
+        if not self.bonuses_db:
+            return {}
+        today = datetime.utcnow().date()
+        # ISO week key: "YYYY-WXX"
+        week_key = today.strftime("%G-W%V")
+        if week_key in self.bonuses_db:
+            return self.bonuses_db[week_key]
+        # Fallback: use the most recent available week
+        try:
+            latest_key = max(self.bonuses_db.keys())
+            return self.bonuses_db[latest_key]
+        except Exception:
+            return {}
+
+    def _refresh_act_tree(self):
+        """Refresh the activities tree after bonus data update."""
+        try:
+            self._fill_act_tree()
+        except Exception:
+            pass
+
     def _run_update(self, version, url):
         """Start background download + show floating panel. Called auto or manually."""
         # If already downloading or ready, don't restart
@@ -1372,7 +1427,7 @@ class App(ctk.CTk):
                     btype = bonus.get("type","") if bonus else ""
                     is_type_indicator = btype in ("sanctuary","challenger")
                     has_symbol = bonus is not None and (bonus_val > 0 or is_type_indicator)
-                    symbol = self.BONUS_SYMBOLS.get(btype,"") if has_symbol else ""
+                    symbol = BONUS_SYMBOLS.get(btype,"") if has_symbol else ""
                     iid    = f"db_{base}"
                     label  = f"   {base}  {symbol}" if symbol else f"   {base}"
                     seen[base] = tv.insert(dn,"end",iid=iid,

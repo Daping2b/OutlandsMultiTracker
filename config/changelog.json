@@ -1,232 +1,181 @@
 [
   {
-    "version": "0.64",
+    "version": "0.64.10",
     "date": "2026-06-01",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Update panel — silent background download with progress, Restart button when ready",
-        "Feedback button — report bugs or suggestions directly from the app"
-      ],
-      "IMPROVEMENT": [
-        "Log loading is now dramatically faster — files without sessions are never reparsed"
-      ],
-      "BUG FIX": [
-        "Fixed critical bug causing all log files to be reparsed on every Load Logs"
-      ]
-    }
+    "changes": [
+      { "type": "BUG FIX", "text": "Ajout de BONUS_SYMBOLS manquant (crash au démarrage)" },
+      { "type": "BUG FIX", "text": "Ajout de _fetch_bonuses manquant (AttributeError au démarrage)" },
+      { "type": "BUG FIX", "text": "Ajout de _get_current_bonuses manquant (crash Activities tree)" }
+    ]
+  },
+  {
+    "version": "0.64.9",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Système update entièrement réécrit" },
+      { "type": "IMPROVEMENT", "text": "Updater v4 optimisé" }
+    ]
+  },
+  {
+    "version": "0.64.8",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Auto-download update au démarrage" },
+      { "type": "NEW FEATURE", "text": "Panneau flottant de progression update" }
+    ]
+  },
+  {
+    "version": "0.64.7",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Version auto injectée dans feedback modal" }
+    ]
+  },
+  {
+    "version": "0.64.6",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "BUG FIX", "text": "Fix startup check update" },
+      { "type": "BUG FIX", "text": "Fix Discord 403 feedback" },
+      { "type": "BUG FIX", "text": "Fix panel_ready crash" }
+    ]
+  },
+  {
+    "version": "0.64.5",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Graphique XP amélioré (hauteur, grille, tooltip aspects, labels)" },
+      { "type": "IMPROVEMENT", "text": "Guild tab Coming Soon en rouge" }
+    ]
+  },
+  {
+    "version": "0.64.4",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "BUG FIX", "text": "Fix tuple lambda dans _manual_check_update" }
+    ]
+  },
+  {
+    "version": "0.64.3",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Feedback modal intégré dans l'app (plus de navigateur)" }
+    ]
+  },
+  {
+    "version": "0.64.2",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "BUG FIX", "text": "Fix _manual_check_update appelait _prompt_update supprimé" }
+    ]
+  },
+  {
+    "version": "0.64.1",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Bouton Feedback dans la navigation" }
+    ]
+  },
+  {
+    "version": "0.64",
+    "date": "2026-05-31",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Panneau update passif" },
+      { "type": "BUG FIX", "text": "Fix load logs massif — tous les fichiers marqués known" }
+    ]
+  },
+  {
+    "version": "0.62.4",
+    "date": "2026-05-31",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "All Time affiché au démarrage" }
+    ]
+  },
+  {
+    "version": "0.62.3",
+    "date": "2026-05-31",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Updater v4, DETACHED_PROCESS simplifié" }
+    ]
+  },
+  {
+    "version": "0.62.2",
+    "date": "2026-05-31",
+    "changes": [
+      { "type": "BUG FIX", "text": "Skip fichiers vides (0 bytes)" },
+      { "type": "BUG FIX", "text": "Fix known_ids via sessions_before" }
+    ]
+  },
+  {
+    "version": "0.62.1",
+    "date": "2026-05-31",
+    "changes": [
+      { "type": "BUG FIX", "text": "Fix critique known_ids (bug any())" }
+    ]
   },
   {
     "version": "0.62",
     "date": "2026-05-31",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Delete sessions now offers 3 options: This Session, Permanent, or Cancel"
-      ],
-      "IMPROVEMENT": [
-        "Log Analysis now opens on All Activities, All Players and All Time automatically",
-        "Update process fully optimized — app relaunches immediately after patching",
-        "Potions, tools, bandages, identification wands and other consumables no longer tracked in loot",
-        "Empty journal files are now skipped automatically"
-      ],
-      "BUG FIX": [
-        "Log loading now correctly detects all sessions across all journal files"
-      ]
-    }
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Delete session : 3 boutons (session / permanent / cancel)" },
+      { "type": "NEW FEATURE", "text": "Filtrage items (potions, outils, consommables)" },
+      { "type": "IMPROVEMENT", "text": "Pre-extraction zip avant lancement updater" }
+    ]
   },
   {
     "version": "0.61",
     "date": "2026-05-31",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Gold and Doubloons from bank deposits are now captured — no more missing gold/doubloons in sessions"
-      ],
-      "IMPROVEMENT": [
-        "Log loading now works correctly even when the game folder has been moved or the app reinstalled",
-        "Session duration now accurately reflects real time — no artificial minimum",
-        "XP tracking now supports multi-word aspect names"
-      ]
-    }
+    "changes": [
+      { "type": "BUG FIX", "text": "Fix parse_logs" },
+      { "type": "BUG FIX", "text": "Gold et doubloons depuis banque" },
+      { "type": "BUG FIX", "text": "XP multi-mots aspects" },
+      { "type": "BUG FIX", "text": "known_ids basé sur filename uniquement" }
+    ]
   },
   {
-    "version": "0.59",
+    "version": "0.60.2",
     "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "BUG FIX": [
-        "Stability pass — fixed multiple crashes, race conditions and code inconsistencies"
-      ]
-    }
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Ossuary Lv-4 ajouté aux coordonnées donjons" }
+    ]
+  },
+  {
+    "version": "0.60.1",
+    "date": "2026-05-30",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Fetch bonus via API GitHub (bypass CDN cache)" }
+    ]
   },
   {
     "version": "0.60",
     "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Ossuary Lv-4 location now properly mapped"
-      ],
-      "IMPROVEMENT": [
-        "Auto-update: app closes instantly when patching",
-        "Weekly bonuses now fetched via GitHub API — always up to date",
-        "Bonus symbols displayed at end of dungeon name with tooltip on hover",
-        "Sanctuary and Challenger dungeons always show their type symbol",
-        "Bonus display falls back to most recent week if current week is missing"
-      ],
-      "BUG FIX": [
-        "Guild tab restored in navigation"
-      ]
-    }
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "os._exit(0) pour fermeture instantanée" },
+      { "type": "IMPROVEMENT", "text": "Updater polling 50ms" }
+    ]
   },
   {
-    "version": "0.58",
+    "version": "0.59.10",
     "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "BUG FIX": [
-        "Auto-update completely overhauled — fixed silent crash causing Error: None on all systems",
-        "Update error message now always shows the actual error reason",
-        "Version comparison now supports patch format (0.57.1, 0.57.2 etc.)",
-        "Downloaded zip is now verified before launching installer",
-        "Updater launch method changed for better Windows compatibility",
-        "Bonus icons in Activities tree fixed — icons now persist correctly after bonus refresh"
-      ]
-    }
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Symboles bonus affichés à la fin du nom de donjon" }
+    ]
+  },
+  {
+    "version": "0.59",
+    "date": "2026-05-30",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Stability pass général" },
+      { "type": "IMPROVEMENT", "text": "Activities tree refonte" }
+    ]
   },
   {
     "version": "0.52",
     "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Guild button added in navigation (Coming Soon)"
-      ],
-      "IMPROVEMENT": [
-        "Activities tree — bonus icons replace triangle for dungeons with active bonus, aligned names",
-        "Bonus column header now uses dedicated bonus icon",
-        "Patch Notes redesigned — separated panels per version with categories"
-      ]
-    }
-  },
-  {
-    "version": "0.51",
-    "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "IMPROVEMENT": [
-        "Bonus column moved after Exp column",
-        "Bonus column now shows icon instead of text"
-      ],
-      "BUG FIX": [
-        "Bonus column was displayed before Exp"
-      ]
-    }
-  },
-  {
-    "version": "0.50",
-    "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Added 'Check for Updates' button on Home page — no need to restart (Thanks to [LDS]Noxiah)"
-      ],
-      "IMPROVEMENT": [
-        "Smoother scrolling on Home and How To pages"
-      ]
-    }
-  },
-  {
-    "version": "0.49",
-    "date": "2026-05-30",
-    "author": "Daping",
-    "changes": {
-      "BUG FIX": [
-        "Auto-update now done entirely in Python — no more PowerShell dependency",
-        "Introduced Updater.exe — separate process handles update without file lock issues"
-      ]
-    }
-  },
-  {
-    "version": "0.44",
-    "date": "2026-05-29",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Weekly Region Bonus system implemented",
-        "Bonus column in Log Analysis shows active bonus per session",
-        "Hover tooltip on bonus icons shows bonus name and value"
-      ]
-    }
-  },
-  {
-    "version": "0.43",
-    "date": "2026-05-29",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Wilderness section — Global shows sessions outside known dungeons"
-      ],
-      "BUG FIX": [
-        "Removed Coming Soon placeholder from Wilderness tree"
-      ]
-    }
-  },
-  {
-    "version": "0.4",
-    "date": "2026-05-28",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Sortable columns with UO icons in Log Analysis",
-        "Splash screen on startup",
-        "Settings page with folder change and full reset",
-        "Delete sessions button (temporary or permanent)"
-      ],
-      "IMPROVEMENT": [
-        "Aspect colors extracted from in-game core images",
-        "Font sizes increased across the app",
-        "Column separators in header"
-      ],
-      "BUG FIX": [
-        "Taskbar icon now shows O-MT logo",
-        "News panel no longer cut off",
-        "Experience All Time button triggers immediately",
-        "Fixed space between expanded session panels and next row"
-      ]
-    }
-  },
-  {
-    "version": "0.3",
-    "date": "2026-05-28",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "All Time button next to all date filters",
-        "UO icons on nav buttons and column headers",
-        "Real-time loading screen with file progress"
-      ],
-      "BUG FIX": [
-        "Fixed image loading for all logos",
-        "Fixed dungeon tree — fully expandable with levels",
-        "Fixed session type column — shows dungeon name directly",
-        "Removed system tray"
-      ]
-    }
-  },
-  {
-    "version": "0.1",
-    "date": "2026-05-27",
-    "author": "Daping",
-    "changes": {
-      "NEW FEATURE": [
-        "Initial release of Outlands Multi Tracker",
-        "Log Analysis with session detection and loot categorization",
-        "Experience tab with monthly/daily/hourly XP chart",
-        "How To tab with Razor scripts",
-        "Multi-character support and date range filtering"
-      ]
-    }
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Guild nav" },
+      { "type": "NEW FEATURE", "text": "Bonus icons" },
+      { "type": "IMPROVEMENT", "text": "Patch Notes redesign" }
+    ]
   }
 ]
