@@ -1019,22 +1019,23 @@ class App(ctk.CTk):
         def check():
             latest, url = check_for_update()
             if latest and version_newer(latest, APP_VERSION):
-                self.after(0, lambda l=latest, u=url: (
-                    self._upd_btn.configure(text=f"⬇  Update to v{l}!", 
-                                           fg_color=GOLD, text_color="#050505",
-                                           state="normal",
-                                           command=lambda: self._start_bg_download(l, u))
-                ))
+                def _show_update(l=latest, u=url):
+                    self._upd_btn.configure(
+                        text=f"⬇  Update to v{l}!",
+                        fg_color=GOLD, text_color="#050505",
+                        state="normal",
+                        command=lambda: self._start_bg_download(l, u))
+                self.after(0, _show_update)
             else:
-                self.after(0, lambda: (
-                    self._upd_btn.configure(text="✓  Up to date!", 
+                def _show_uptodate():
+                    self._upd_btn.configure(text="✓  Up to date!",
                                            fg_color="#1a4a1a", text_color="#88ff88",
                                            state="normal")
-                ))
-                self.after(3000, lambda: self._upd_btn.configure(
-                    text="🔄  Check for Updates",
-                    fg_color=BG4, text_color=DIM2,
-                    command=self._manual_check_update))
+                    self.after(3000, lambda: self._upd_btn.configure(
+                        text="🔄  Check for Updates",
+                        fg_color=BG4, text_color=DIM2,
+                        command=self._manual_check_update))
+                self.after(0, _show_uptodate)
         threading.Thread(target=check, daemon=True).start()
 
     def _show_splash(self):
