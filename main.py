@@ -870,9 +870,148 @@ class App(ctk.CTk):
         widget.bind("<Leave>", leave)
 
     def _open_feedback(self):
-        """Open the feedback form in the default browser."""
-        import webbrowser
-        webbrowser.open("https://daping2b.github.io/OutlandsMultiTracker/feedback")
+        """Show feedback modal directly in the app."""
+        modal = tk.Toplevel(self)
+        modal.title("Feedback")
+        modal.configure(bg=BG)
+        modal.resizable(False, False)
+        modal.grab_set()
+        modal.protocol("WM_DELETE_WINDOW", modal.destroy)
+        w, h = 480, 520
+        x = self.winfo_rootx() + (self.winfo_width()  - w) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - h) // 2
+        modal.geometry(f"{w}x{h}+{x}+{y}")
+
+        # Header
+        hdr = ctk.CTkFrame(modal, fg_color=BG2, corner_radius=0)
+        hdr.pack(fill="x")
+        ctk.CTkLabel(hdr, text="⚔  O-MT Feedback",
+                     font=("Georgia", 16, "bold"), text_color=GOLD_LT,
+                     fg_color=BG2).pack(pady=(14,2))
+        ctk.CTkLabel(hdr, text="Report a bug or share a suggestion",
+                     font=F_SMALL, text_color=DIM2, fg_color=BG2).pack(pady=(0,12))
+        ctk.CTkFrame(hdr, fg_color=GOLD_DK, height=1).pack(fill="x")
+
+        scroll_frame = ctk.CTkScrollableFrame(modal, fg_color=BG, corner_radius=0)
+        scroll_frame.pack(fill="both", expand=True, padx=16, pady=12)
+
+        # Type selection
+        ctk.CTkLabel(scroll_frame, text="Type", font=F_BODY, text_color=DIM2,
+                     anchor="w").pack(fill="x", pady=(0,6))
+        type_var = tk.StringVar(value="")
+        type_row = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+        type_row.pack(fill="x", pady=(0,12))
+        type_btns = {}
+        def select_type(t):
+            type_var.set(t)
+            for k, b in type_btns.items():
+                b.configure(fg_color=GOLD if k==t else BG3,
+                            text_color="#050505" if k==t else DIM2,
+                            border_color=GOLD if k==t else BORDER)
+        for i, (label, emoji) in enumerate([("Bug","🐛"), ("Suggestion","💡"), ("Other","📝")]):
+            b = ctk.CTkButton(type_row, text=f"{emoji}  {label}", width=134, height=38,
+                              fg_color=BG3, text_color=DIM2, hover_color=BG4,
+                              border_width=1, border_color=BORDER, corner_radius=6,
+                              font=F_BODY, command=lambda t=label: select_type(t))
+            b.grid(row=0, column=i, padx=(0,6) if i<2 else 0)
+            type_btns[label] = b
+
+        # Version
+        ctk.CTkLabel(scroll_frame, text="App version", font=F_BODY, text_color=DIM2,
+                     anchor="w").pack(fill="x", pady=(0,6))
+        version_entry = ctk.CTkEntry(scroll_frame, placeholder_text=f"e.g. {APP_VERSION}",
+                                     height=36, font=F_BODY)
+        version_entry.pack(fill="x", pady=(0,12))
+        version_entry.insert(0, APP_VERSION)
+
+        # Description
+        ctk.CTkLabel(scroll_frame, text="Description", font=F_BODY, text_color=DIM2,
+                     anchor="w").pack(fill="x", pady=(0,6))
+        desc_box = ctk.CTkTextbox(scroll_frame, height=110, font=F_BODY,
+                                   fg_color=BG3, border_color=BORDER, border_width=1)
+        desc_box.pack(fill="x", pady=(0,12))
+
+        # Pseudo
+        ctk.CTkLabel(scroll_frame, text="In-game name  (optional)", font=F_BODY,
+                     text_color=DIM2, anchor="w").pack(fill="x", pady=(0,6))
+        pseudo_entry = ctk.CTkEntry(scroll_frame, placeholder_text="Your character name",
+                                    height=36, font=F_BODY)
+        pseudo_entry.pack(fill="x", pady=(0,16))
+
+        # Status label
+        status_lbl = ctk.CTkLabel(scroll_frame, text="", font=F_SMALL,
+                                   text_color=DIM2, fg_color="transparent")
+        status_lbl.pack()
+
+        def send():
+            ftype   = type_var.get()
+            version = version_entry.get().strip()
+            desc    = desc_box.get("1.0", "end").strip()
+            pseudo  = pseudo_entry.get().strip() or "Anonymous"
+            if not ftype:   status_lbl.configure(text="⚠ Please select a type.", text_color="#cc4444"); return
+            if not version: status_lbl.configure(text="⚠ Please enter the version.", text_color="#cc4444"); return
+            if not desc:    status_lbl.configure(text="⚠ Please add a description.", text_color="#cc4444"); return
+
+            send_btn.configure(state="disabled", text="Sending...")
+            status_lbl.configure(text="", text_color=DIM2)
+
+            emojis = {"Bug":"🐛","Suggestion":"💡","Other":"📝"}
+            colors = {"Bug":13395012,"Suggestion":13145898,"Other":5604556}
+            import urllib.request as _ur, json as _json, ssl as _ssl
+            payload = _json.dumps({"embeds":[{
+                "title": f"{emojis.get(ftype,'📝')}  New Feedback — {ftype}",
+                "description": desc,
+                "color": colors.get(ftype, 8947848),
+                "fields": [
+                    {"name":"Version","value":version,"inline":True},
+                    {"name":"Type",   "value":ftype,  "inline":True},
+                    {"name":"Player", "value":pseudo, "inline":True}
+                ],
+                "footer":{"text":f"OMT Feedback • {__import__('datetime').datetime.now().strftime('%d/%m/%Y %H:%M')}"}
+            }]}).encode()
+
+            def do_send():
+                try:
+                    ctx = _ssl.create_default_context()
+                    ctx.check_hostname = False
+                    ctx.verify_mode = _ssl.CERT_NONE
+                    req = _ur.Request(
+                        "https://discord.com/api/webhooks/1510977027895984149/85LKfte18fOibmEbrLEo4OkLcVEvjR57NeTSlHywsKaluLAlzV92vrK4Oc4s0dp_RU1S",
+                        data=payload,
+                        headers={"Content-Type":"application/json"},
+                        method="POST")
+                    with _ur.urlopen(req, timeout=10, context=ctx) as r:
+                        ok = r.status in (200, 204)
+                    if ok:
+                        self.after(0, lambda: (
+                            status_lbl.configure(text="✓ Feedback sent! Thank you.", text_color="#80c080"),
+                            send_btn.configure(state="disabled", text="Sent ✓",
+                                               fg_color="#1a4a1a", text_color="#80c080")
+                        ))
+                    else:
+                        self.after(0, lambda: (
+                            status_lbl.configure(text="⚠ Error sending. Please try again.", text_color="#cc4444"),
+                            send_btn.configure(state="normal", text="Send Feedback")
+                        ))
+                except Exception as e:
+                    self.after(0, lambda err=str(e): (
+                        status_lbl.configure(text=f"⚠ {err[:60]}", text_color="#cc4444"),
+                        send_btn.configure(state="normal", text="Send Feedback")
+                    ))
+            threading.Thread(target=do_send, daemon=True).start()
+
+        # Buttons row
+        btn_row = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+        btn_row.pack(fill="x", pady=(8,0))
+        ctk.CTkButton(btn_row, text="Cancel", width=100, height=36,
+                      fg_color=BG3, text_color=DIM2, hover_color=BG4,
+                      font=F_BODY, corner_radius=6,
+                      command=modal.destroy).pack(side="left")
+        send_btn = ctk.CTkButton(btn_row, text="Send Feedback", width=180, height=36,
+                                  fg_color=GOLD, text_color="#050505", hover_color=GOLD_LT,
+                                  font=("Segoe UI",13,"bold"), corner_radius=6,
+                                  command=send)
+        send_btn.pack(side="right")
 
     def _manual_check_update(self):
         """Manual update check triggered from Home page button."""
