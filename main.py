@@ -1922,32 +1922,118 @@ class App(ctk.CTk):
         if not buckets: return
         if len(buckets)>60: buckets=buckets[-60:]
 
-        fig,ax=plt.subplots(figsize=(max(8,len(buckets)*0.9),1.6))
-        fig.patch.set_facecolor(BG); ax.set_facecolor(BG2)
-        ax.tick_params(colors=TEXT,labelsize=8)
-        for sp in ax.spines.values(): sp.set_edgecolor(BG3)
-        x=np.arange(len(buckets)); bottoms=np.zeros(len(buckets))
-        for asp in aspects:
-            vals=np.array([bucket_asp[m].get(asp,0) for m in buckets])
-            bars=ax.bar(x,vals,bottom=bottoms,label=asp,color=ASPECT_COLORS.get(asp,"#888"),width=0.72)
-            for bar,val,bot in zip(bars,vals,bottoms):
-                if val>0 and bar.get_height()>200:
-                    ax.text(bar.get_x()+bar.get_width()/2, bot+bar.get_height()/2,
-                            f"{asp}\n{int(val):,}", ha="center", va="center",
-                            fontsize=5, color="black", fontweight="bold", clip_on=True)
-            bottoms+=vals
+        # ── Chart sizing — minimum height for readability ────────────────────
+        n_buckets = len(buckets)
+        fig_w = max(10, n_buckets * 0.85)
+        fig_h = 4.5
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=96)
+        fig.patch.set_facecolor(BG)
+        ax.set_facecolor(BG2)
 
-        lbl_map={"month":"Monthly","day":"Daily","hour":"Hourly"}
-        title=", ".join(sorted(self._xp_chars)) or "All"
-        ax.set_title(f"XP ({lbl_map[view]}) — {title}",color=GOLD_LT,fontsize=10,pad=4)
-        ax.set_xticks(x); ax.set_xticklabels(buckets,rotation=20 if view=="month" else 45,ha="right",color=TEXT,fontsize=7)
-        ax.set_ylabel("XP",color=DIM,fontsize=7)
-        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v,p:f"{int(v):,}"))
-        ax.legend(loc="upper left",fontsize=6,facecolor=BG3,labelcolor=TEXT,framealpha=0.9,ncol=5)
-        plt.tight_layout(pad=0.3)
-        FigureCanvasTkAgg(fig,master=self._xp_chart).get_tk_widget().pack(fill="both",expand=True)
+        # Spine and tick styling
+        for sp in ax.spines.values(): sp.set_edgecolor(BG3)
+        ax.tick_params(colors=TEXT, labelsize=8, length=3)
+        ax.set_axisbelow(True)
+
+        # Light dotted grid on Y — improves value reading
+        ax.yaxis.grid(True, linestyle=":", linewidth=0.6, color="#333333", alpha=0.8)
+        ax.xaxis.grid(False)
+
+        x = np.arange(n_buckets)
+        bottoms = np.zeros(n_buckets)
+
+        # Store bar info for tooltip
+        bar_data = []  # list of (bar_artist, asp_name, val) for tooltip
+
+        for asp in aspects:
+            vals = np.array([bucket_asp[m].get(asp, 0) for m in buckets])
+            bars = ax.bar(x, vals, bottom=bottoms, label=asp,
+                          color=ASPECT_COLORS.get(asp, "#888"),
+                          width=0.78, edgecolor="none")
+            for bar, val, bot in zip(bars, vals, bottoms):
+                bar_data.append((bar, asp, val))
+                if val > 0 and bar.get_height() > 300:
+                    ax.text(bar.get_x() + bar.get_width() / 2,
+                            bot + bar.get_height() / 2,
+                            f"{asp}\n{int(val):,}",
+                            ha="center", va="center",
+                            fontsize=6, color="#000000",
+                            fontweight="bold", clip_on=True)
+            bottoms += vals
+
+        lbl_map = {"month": "Monthly", "day": "Daily", "hour": "Hourly"}
+        title = ", ".join(sorted(self._xp_chars)) or "All"
+        ax.set_title(f"XP — {lbl_map[view]} — {title}",
+                     color=GOLD_LT, fontsize=11, pad=8, fontweight="bold")
+        ax.set_xticks(x)
+        ax.set_xticklabels(buckets, rotation=45, ha="right", color=TEXT, fontsize=8)
+        ax.set_ylabel("XP Gained", color=DIM, fontsize=9, labelpad=6)
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, p: f"{int(v):,}"))
+
+        # Legend below chart — cleaner than inside
+        legend = ax.legend(loc="upper center",
+                           bbox_to_anchor=(0.5, -0.22),
+                           ncol=min(len(aspects), 6),
+                           fontsize=8,
+                           facecolor=BG3,
+                           labelcolor=TEXT,
+                           framealpha=0.9,
+                           edgecolor=BG3,
+                           handlelength=1.2,
+                           handleheight=0.8)
+
+        plt.tight_layout(pad=0.5, rect=[0, 0.08, 1, 1])
+
+        canvas = FigureCanvasTkAgg(fig, master=self._xp_chart)
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(fill="both", expand=True)
+
+        # ── Tooltip on hover ─────────────────────────────────────────────────
+        tip_win = [None]
+        tip_lbl = [None]
+
+        def _on_motion(event):
+            if event.inaxes != ax:
+                _hide_tip()
+                return
+            for bar, asp, val in bar_data:
+                if val <= 0: continue
+                if bar.contains(event)[0]:
+                    _show_tip(event, asp, val)
+                    return
+            _hide_tip()
+
+        def _show_tip(event, asp, val):
+            if tip_win[0] is None or not tip_win[0].winfo_exists():
+                tip_win[0] = tk.Toplevel(self)
+                tip_win[0].wm_overrideredirect(True)
+                tip_win[0].attributes("-topmost", True)
+                tip_lbl[0] = tk.Label(tip_win[0],
+                                      background="#1a1a1a",
+                                      foreground=ASPECT_COLORS.get(asp, GOLD_LT),
+                                      font=("Segoe UI", 10, "bold"),
+                                      relief="solid", borderwidth=1,
+                                      padx=8, pady=4)
+                tip_lbl[0].pack()
+            else:
+                tip_lbl[0].configure(foreground=ASPECT_COLORS.get(asp, GOLD_LT))
+            tip_lbl[0].configure(text=f"{asp}  —  {int(val):,} XP")
+            rx = canvas_widget.winfo_rootx() + int(event.x) + 14
+            ry = canvas_widget.winfo_rooty() + int(canvas_widget.winfo_height() - event.y) - 20
+            tip_win[0].wm_geometry(f"+{rx}+{ry}")
+            tip_win[0].deiconify()
+
+        def _hide_tip():
+            if tip_win[0] and tip_win[0].winfo_exists():
+                tip_win[0].withdraw()
+
+        def _on_leave(event):
+            _hide_tip()
+
+        canvas.mpl_connect("motion_notify_event", _on_motion)
+        canvas.mpl_connect("figure_leave_event", _on_leave)
         plt.close(fig)
-        self._draw_xp_table(ev,last_xp)
+        self._draw_xp_table(ev, last_xp)
 
     def _draw_xp_table(self,ev,last_xp):
         ctk.CTkLabel(self._xp_table,text="  ✦  Estimated Days to Next Level",
@@ -1998,7 +2084,7 @@ class App(ctk.CTk):
         ctk.CTkLabel(scroll,text="Guild",font=("Georgia",28,"bold"),text_color=GOLD_LT).pack()
         ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=80,pady=12)
         ctk.CTkLabel(scroll,text="Coming Soon",font=("Palatino Linotype",18,"italic"),
-                     text_color=DIM2).pack(pady=8)
+                     text_color="#cc3333").pack(pady=8)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # HOW TO
