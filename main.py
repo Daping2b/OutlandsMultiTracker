@@ -880,11 +880,11 @@ class App(ctk.CTk):
         def check():
             latest, url = check_for_update()
             if latest and version_newer(latest, APP_VERSION):
-                self.after(0, lambda: (
-                    self._upd_btn.configure(text=f"⬇  Update to v{latest}!", 
+                self.after(0, lambda l=latest, u=url: (
+                    self._upd_btn.configure(text=f"⬇  Update to v{l}!", 
                                            fg_color=GOLD, text_color="#050505",
                                            state="normal",
-                                           command=lambda: self._prompt_update(latest, url))
+                                           command=lambda: self._start_bg_download(l, u))
                 ))
             else:
                 self.after(0, lambda: (
@@ -892,7 +892,6 @@ class App(ctk.CTk):
                                            fg_color="#1a4a1a", text_color="#88ff88",
                                            state="normal")
                 ))
-                # Reset button after 3 seconds
                 self.after(3000, lambda: self._upd_btn.configure(
                     text="🔄  Check for Updates",
                     fg_color=BG4, text_color=DIM2,
