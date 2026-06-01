@@ -1,19 +1,18 @@
 [
   {
     "version": "0.64",
-    "date": "2026-05-31",
+    "date": "2026-06-01",
     "author": "Daping",
     "changes": {
       "NEW FEATURE": [
-        "Update panel — a floating notification in the bottom-right corner shows download progress silently in the background, with a Restart button when ready"
+        "Update panel — silent background download with progress, Restart button when ready",
+        "Feedback button — report bugs or suggestions directly from the app"
       ],
       "IMPROVEMENT": [
-        "Log loading is now dramatically faster — files without OMT sessions are remembered and never reparsed",
-        "Update download now happens silently without interrupting your session",
-        "Minimise the update panel to a small icon and restore it anytime"
+        "Log loading is now dramatically faster — files without sessions are never reparsed"
       ],
       "BUG FIX": [
-        "Fixed critical bug causing all 500+ log files to be reparsed on every Load Logs"
+        "Fixed critical bug causing all log files to be reparsed on every Load Logs"
       ]
     }
   },

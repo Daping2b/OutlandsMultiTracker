@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O-MT Feedback</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #080808;
+    color: #e8dcc8;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+  .card {
+    background: #111;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 520px;
+  }
+  .logo {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+  .logo h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #c8952a;
+    letter-spacing: 1px;
+  }
+  .logo p {
+    font-size: 13px;
+    color: #887a68;
+    margin-top: 4px;
+  }
+  .divider {
+    height: 1px;
+    background: #2a2a2a;
+    margin: 1.25rem 0;
+  }
+  .field { margin-bottom: 1.25rem; }
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #887a68;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  label .req { color: #c8952a; margin-left: 2px; }
+  input[type=text], textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: #0d0d0d;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    color: #e8dcc8;
+    font-size: 14px;
+    font-family: 'Segoe UI', sans-serif;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus, textarea:focus {
+    outline: none;
+    border-color: #c8952a;
+  }
+  textarea { resize: vertical; min-height: 110px; line-height: 1.6; }
+  .type-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .type-btn {
+    padding: 12px 8px;
+    background: #0d0d0d;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    color: #887a68;
+    font-size: 13px;
+    font-family: 'Segoe UI', sans-serif;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .type-btn:hover { border-color: #c8952a; color: #e8dcc8; }
+  .type-btn.selected { border-color: #c8952a; background: #1a1200; color: #c8952a; }
+  .type-btn .ico { display: block; font-size: 22px; margin-bottom: 5px; }
+  .char-count { font-size: 11px; color: #555; text-align: right; margin-top: 4px; }
+  .submit-btn {
+    width: 100%;
+    padding: 12px;
+    background: #c8952a;
+    color: #050505;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'Segoe UI', sans-serif;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-top: 0.5rem;
+  }
+  .submit-btn:hover { background: #e0a830; }
+  .submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .success { display: none; text-align: center; padding: 2rem 0; }
+  .success .check { font-size: 48px; margin-bottom: 12px; }
+  .success h2 { font-size: 18px; color: #c8952a; margin-bottom: 8px; }
+  .success p { font-size: 14px; color: #887a68; }
+  .hint { font-size: 12px; color: #555; margin-top: 5px; }
+  .version-row { display: flex; gap: 8px; }
+  .version-row input { flex: 1; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <h1>⚔ O-MT Feedback</h1>
+    <p>Outlands Multi Tracker — by Daping</p>
+  </div>
+  <div class="divider"></div>
+
+  <form id="form">
+    <div class="field">
+      <label>Type<span class="req">*</span></label>
+      <div class="type-grid">
+        <button type="button" class="type-btn" data-val="Bug" onclick="selectType(this)">
+          <span class="ico">🐛</span>Bug
+        </button>
+        <button type="button" class="type-btn" data-val="Suggestion" onclick="selectType(this)">
+          <span class="ico">💡</span>Suggestion
+        </button>
+        <button type="button" class="type-btn" data-val="Other" onclick="selectType(this)">
+          <span class="ico">📝</span>Other
+        </button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>App version<span class="req">*</span></label>
+      <input type="text" id="version" placeholder="e.g. 0.64" maxlength="20">
+    </div>
+
+    <div class="field">
+      <label>Description<span class="req">*</span></label>
+      <textarea id="description" placeholder="Describe the bug or suggestion..." maxlength="1000" oninput="document.getElementById('cc').textContent=this.value.length"></textarea>
+      <div class="char-count"><span id="cc">0</span> / 1000</div>
+    </div>
+
+    <div class="field">
+      <label>In-game name <span style="font-weight:400;text-transform:none;color:#555">(optional)</span></label>
+      <input type="text" id="pseudo" placeholder="Your character name" maxlength="50">
+      <div class="hint">Helps us follow up if needed.</div>
+    </div>
+
+    <button type="submit" class="submit-btn" id="btn">Send Feedback</button>
+  </form>
+
+  <div class="success" id="success">
+    <div class="check">✅</div>
+    <h2>Feedback sent!</h2>
+    <p>Thank you — your message has been received.<br>We'll look into it shortly.</p>
+  </div>
+</div>
+
+<script>
+const WEBHOOK = "https://discord.com/api/webhooks/1510977027895984149/85LKfte18fOibmEbrLEo4OkLcVEvjR57NeTSlHywsKaluLAlzV92vrK4Oc4s0dp_RU1S";
+let selectedType = "";
+
+function selectType(btn) {
+  document.querySelectorAll(".type-btn").forEach(b => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  selectedType = btn.dataset.val;
+}
+
+document.getElementById("form").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const version = document.getElementById("version").value.trim();
+  const desc    = document.getElementById("description").value.trim();
+  const pseudo  = document.getElementById("pseudo").value.trim() || "Anonymous";
+  const btn     = document.getElementById("btn");
+
+  if (!selectedType) { alert("Please select a feedback type."); return; }
+  if (!version)      { alert("Please enter the app version."); return; }
+  if (!desc)         { alert("Please add a description."); return; }
+
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+
+  const emojis = { Bug: "🐛", Suggestion: "💡", Other: "📝" };
+  const colors = { Bug: 13395012, Suggestion: 13145898, Other: 5604556 };
+
+  const payload = {
+    embeds: [{
+      title: `${emojis[selectedType]}  New Feedback — ${selectedType}`,
+      description: desc,
+      color: colors[selectedType] || 8947848,
+      fields: [
+        { name: "Version", value: version,       inline: true },
+        { name: "Type",    value: selectedType,   inline: true },
+        { name: "Player",  value: pseudo,         inline: true }
+      ],
+      footer: { text: `OMT Feedback • ${new Date().toLocaleString("fr-FR")}` }
+    }]
+  };
+
+  try {
+    const r = await fetch(WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (r.ok || r.status === 204) {
+      document.getElementById("form").style.display = "none";
+      document.getElementById("success").style.display = "block";
+    } else {
+      throw new Error("HTTP " + r.status);
+    }
+  } catch(err) {
+    alert("Error sending feedback. Please try again.\n" + err);
+    btn.disabled = false;
+    btn.textContent = "Send Feedback";
+  }
+});
+</script>
+</body>
+</html>

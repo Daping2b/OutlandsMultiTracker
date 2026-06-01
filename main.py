@@ -869,6 +869,11 @@ class App(ctk.CTk):
         widget.bind("<Enter>", enter)
         widget.bind("<Leave>", leave)
 
+    def _open_feedback(self):
+        """Open the feedback form in the default browser."""
+        import webbrowser
+        webbrowser.open("https://daping2b.github.io/OutlandsMultiTracker/feedback")
+
     def _manual_check_update(self):
         """Manual update check triggered from Home page button."""
         self._upd_btn.configure(text="🔄  Checking...", state="disabled")
@@ -1049,8 +1054,12 @@ class App(ctk.CTk):
             self._tb[key]=b
 
         settings_btn=nav_btn(nav,"Settings","tinkering_tinkertools.png",lambda:self._show("Settings"))
-        settings_btn.pack(side="right",padx=8,pady=8)
+        settings_btn.pack(side="right",padx=4,pady=8)
         self._tb["Settings"]=settings_btn
+
+        feedback_btn=nav_btn(nav,"Feedback","feedback.png",self._open_feedback)
+        feedback_btn.pack(side="right",padx=4,pady=8)
+
         ctk.CTkLabel(nav,text=f"v{APP_VERSION}",font=F_SMALL_B,text_color=GOLD_LT,fg_color=NAV_BG).pack(side="right",padx=4)
 
         self._body=ctk.CTkFrame(self,fg_color=BG,corner_radius=0)
