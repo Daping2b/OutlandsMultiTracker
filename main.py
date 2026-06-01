@@ -742,132 +742,161 @@ class App(ctk.CTk):
 
     # ── Auto-update ────────────────────────────────────────────────────────────
     def _check_update(self):
-        """Check for update silently — if found, start background download."""
-        latest, url = check_for_update()
-        if latest and version_newer(latest, APP_VERSION):
-            self.after(0, lambda: self._start_bg_download(latest, url))
+        """Auto-check at startup — if update found, download immediately."""
+        try:
+            latest, url = check_for_update()
+            if latest and version_newer(latest, APP_VERSION):
+                self.after(0, lambda l=latest, u=url: self._run_update(l, u))
+        except Exception as e:
+            print(f"[UPDATE] Check failed: {e}")
 
-    def _start_bg_download(self, version, url):
-        """Download silently in background. Show floating panel with progress."""
+    def _run_update(self, version, url):
+        """Start background download + show floating panel. Called auto or manually."""
+        # If already downloading or ready, don't restart
+        if getattr(self, "_upd_running", False):
+            self._show_panel()
+            return
+        self._upd_running = True
         self._upd_version = version
         self._upd_pre_dir = None
-        self._upd_ready   = False
-        self._show_update_panel(version)
-        def progress_cb(done, total, msg):
-            self.after(0, lambda d=done, t=total, m=msg: self._upd_panel_progress(d, t, m))
-        def run():
+        # Build panel before starting thread
+        self._build_update_panel(version)
+        self._panel_set("Downloading...", 0)
+
+        def _download():
             try:
-                pre_dir = download_update(url, progress_cb)
+                _last_ui = [0.0]
+                def cb(done, total, msg):
+                    import time as _t
+                    now = _t.monotonic()
+                    if now - _last_ui[0] < 0.15: return  # throttle: max 1 UI update per 150ms
+                    _last_ui[0] = now
+                    pct = done / max(1, total)
+                    self.after(0, lambda p=pct, m=msg: self._panel_set(m, p))
+                pre_dir = download_update(url, cb)
                 self._upd_pre_dir = pre_dir
-                self.after(0, self._upd_panel_ready)
+                self.after(0, self._panel_ready)
             except Exception as e:
-                print(f"[UPDATE] Background download failed: {e}")
-                self.after(0, lambda m=str(e): self._upd_panel_error(m))
-        threading.Thread(target=run, daemon=True).start()
+                self._upd_running = False
+                self.after(0, lambda m=str(e): self._panel_error(m))
+
+        threading.Thread(target=_download, daemon=True).start()
 
     def _do_restart_and_update(self):
-        """User clicked Restart — launch updater then exit immediately."""
+        """User clicked Restart — launch updater and exit."""
         try:
             launch_updater(getattr(self, "_upd_pre_dir", None))
             self.after(50, lambda: os._exit(0))
         except Exception as e:
             messagebox.showerror("Update failed", f"Could not launch updater:\n{e}")
 
-    # ── Bonus helpers ──────────────────────────────────────────────────────────
-    BONUS_ICONS = {
-        "sanctuary": "bonus_sanctuary.png",
-        "challenger": "bonus_challenger.png",
-        "respawn":    "bonus_respawn.png",
-        "gold_loot":  "bonus_gold_loot.png",
-        "experience": "bonus_experience.png",
-    }
-    BONUS_SYMBOLS = {
-        "sanctuary":  "🛡️",
-        "challenger": "💀",
-        "respawn":    "⚡",
-        "gold_loot":  "💰",
-        "experience": "⭐",
-        "vendor":     "🪙",
-        "crafting":   "🔨",
-        "unknown":    "⭐",
-    }
-    BONUS_LABELS = {
-        "sanctuary":  "Sanctuary Dungeon",
-        "challenger": "Challenger Dungeon",
-        "respawn":    "Faster Respawn",
-        "gold_loot":  "Gold Loot Bonus",
-        "experience": "Experience Bonus",
-        "vendor":     "Vendor Rebate",
-        "crafting":   "Exceptional Crafting",
-    }
-
-    def _fetch_bonuses(self):
-        """Download latest bonuses.json via GitHub API (bypasses CDN cache)."""
-        try:
-            import urllib.request as _ur, ssl, base64
-            url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/config/bonuses.json"
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            req = _ur.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 OutlandsMultiTracker",
-                "Accept":     "application/vnd.github.v3+json"
-            })
-            with _ur.urlopen(req, timeout=10, context=ctx) as r:
-                api_resp = json.loads(r.read().decode())
-            content_b64 = api_resp.get("content","").replace("\n","")
-            data = json.loads(base64.b64decode(content_b64).decode("utf-8"))
-            if data:
-                self.bonuses_db = data
-                self._tree_bonus_photos = {}
-                save_json(CONFIG_DIR/"bonuses.json", data)
-                self.after(0, self._refresh_bonus_tree)
-        except Exception as e:
-            print(f"[BONUSES] Fetch failed: {e}")
-
-    def _get_week_key(self, dt=None):
-        if dt is None: dt = datetime.now()
-        days_since_sat = (dt.weekday() + 2) % 7
-        return (dt - timedelta(days=days_since_sat)).strftime("%Y-%m-%d")
-
-    def _get_bonus_for_session(self, s):
-        loc = s.get("location")
-        if not loc: return None
-        start = s.get("start")
-        if not start: return None
-        week = self.bonuses_db.get(self._get_week_key(start), {})
-        if loc in week: return week[loc]
-        for k,v in week.items():
-            if k.lower() in loc.lower() or loc.lower() in k.lower():
-                return v
-        return None
-
-    def _get_current_bonuses(self):
-        week = self._get_week_key()
-        if week in self.bonuses_db:
-            return self.bonuses_db[week]
-        if self.bonuses_db:
-            return self.bonuses_db[max(self.bonuses_db.keys())]
-        return {}
-
-    def _refresh_bonus_tree(self):
-        self._fill_act_tree()
-
-    def _add_tooltip(self, widget, text):
-        tip = [None]
-        def enter(e):
-            tip[0] = tk.Toplevel(widget)
-            tip[0].wm_overrideredirect(True)
-            tip[0].wm_geometry(f"+{e.x_root+12}+{e.y_root+6}")
-            tk.Label(tip[0], text=text, background="#1a1a1a", foreground=GOLD_LT,
-                     font=F_SMALL, relief="solid", borderwidth=1, padx=6, pady=3).pack()
-        def leave(e):
-            if tip[0]:
-                try: tip[0].destroy()
+    def _build_update_panel(self, version):
+        """Build the floating panel. Destroys old one if exists."""
+        # Destroy old panel cleanly
+        for attr in ("_upd_panel", "_upd_mini"):
+            w = getattr(self, attr, None)
+            if w:
+                try: w.destroy()
                 except: pass
-                tip[0] = None
-        widget.bind("<Enter>", enter)
-        widget.bind("<Leave>", leave)
+            setattr(self, attr, None)
+
+        panel = ctk.CTkFrame(self, fg_color=BG2, border_width=1,
+                             border_color=GOLD_DK, corner_radius=8, width=260)
+        panel.pack_propagate(False)
+        self._upd_panel = panel
+
+        # Header
+        hdr = ctk.CTkFrame(panel, fg_color="transparent")
+        hdr.pack(fill="x", padx=10, pady=(10,4))
+        ctk.CTkLabel(hdr, text=f"⬇  Update v{version}",
+                     font=("Segoe UI",12,"bold"), text_color=GOLD_LT,
+                     fg_color="transparent").pack(side="left")
+        ctk.CTkButton(hdr, text="×", width=22, height=22, font=("Segoe UI",14),
+                      fg_color="transparent", text_color=DIM2, hover_color=BG4,
+                      command=self._hide_panel).pack(side="right")
+
+        # Status
+        self._upd_status = ctk.CTkLabel(panel, text="",
+                                         font=("Segoe UI",11), text_color=DIM2,
+                                         fg_color="transparent")
+        self._upd_status.pack(padx=10, pady=(0,4))
+
+        # Progress bar container
+        bar_bg = ctk.CTkFrame(panel, fg_color=BG4, height=8, corner_radius=4)
+        bar_bg.pack(fill="x", padx=10, pady=(0,4))
+        bar_bg.pack_propagate(False)
+        self._upd_bar_bg  = bar_bg
+        self._upd_bar_fill = ctk.CTkFrame(bar_bg, fg_color=GOLD, height=8,
+                                           corner_radius=4)
+        self._upd_bar_fill.place(relx=0, rely=0, relheight=1, relwidth=0)
+
+        # Pct label
+        self._upd_pct = ctk.CTkLabel(panel, text="", font=("Segoe UI",10),
+                                      text_color=DIM2, fg_color="transparent")
+        self._upd_pct.pack(pady=(0,4))
+
+        # Restart button — hidden until ready
+        self._upd_restart = ctk.CTkButton(
+            panel, text="⟳  Restart to Update", width=220, height=34,
+            fg_color=GOLD, text_color="#050505", hover_color=GOLD_LT,
+            font=("Segoe UI",12,"bold"), corner_radius=6,
+            command=self._do_restart_and_update)
+
+        ctk.CTkFrame(panel, fg_color="transparent", height=6).pack()
+
+        # Mini button (hidden initially)
+        self._upd_mini = ctk.CTkButton(
+            self, text="⬇", width=38, height=38, font=("Segoe UI",16),
+            fg_color=GOLD, text_color="#050505", hover_color=GOLD_LT,
+            corner_radius=19, command=self._show_panel)
+
+        self._show_panel()
+
+    def _show_panel(self):
+        """Place the full panel bottom-right."""
+        if self._upd_panel and self._upd_panel.winfo_exists():
+            if self._upd_mini and self._upd_mini.winfo_exists():
+                self._upd_mini.place_forget()
+            self._upd_panel.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
+            self._upd_panel.lift()
+
+    def _hide_panel(self):
+        """Hide panel, show mini button."""
+        if self._upd_panel and self._upd_panel.winfo_exists():
+            self._upd_panel.place_forget()
+        if self._upd_mini and self._upd_mini.winfo_exists():
+            self._upd_mini.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
+            self._upd_mini.lift()
+
+    def _panel_set(self, msg, pct):
+        """Update progress bar and status label."""
+        try:
+            self._upd_status.configure(text=msg[:45])
+            self._upd_bar_fill.place(relx=0, rely=0, relheight=1, relwidth=min(1.0, pct))
+            if pct > 0 and pct < 1:
+                self._upd_pct.configure(text=f"{int(pct*100)}%")
+            else:
+                self._upd_pct.configure(text="")
+        except Exception: pass
+
+    def _panel_ready(self):
+        """Show green bar + Restart button."""
+        try:
+            self._upd_status.configure(text="Ready to install ✓", text_color="#80c080")
+            self._upd_pct.configure(text="")
+            self._upd_bar_fill.configure(fg_color="#80c080")
+            self._upd_bar_fill.place(relx=0, rely=0, relheight=1, relwidth=1.0)
+            self._upd_restart.pack(padx=10, pady=(0,10))
+            self._show_panel()
+        except Exception as e:
+            print(f"[UPD] panel_ready error: {e}")
+
+    def _panel_error(self, msg):
+        """Show error in panel."""
+        try:
+            self._upd_status.configure(text=f"⚠ {msg[:45]}", text_color="#cc4444")
+            self._upd_pct.configure(text="")
+        except Exception: pass
 
     def _open_feedback(self):
         """Show feedback modal directly in the app."""
@@ -1008,28 +1037,32 @@ class App(ctk.CTk):
         send_btn.pack(side="right")
 
     def _manual_check_update(self):
-        """Manual update check triggered from Home page button."""
+        """Manual update check from Home button — downloads automatically if update found."""
         self._upd_btn.configure(text="🔄  Checking...", state="disabled")
         def check():
-            latest, url = check_for_update()
-            if latest and version_newer(latest, APP_VERSION):
-                def _show_update(l=latest, u=url):
-                    self._upd_btn.configure(
-                        text=f"⬇  Update to v{l}!",
-                        fg_color=GOLD, text_color="#050505",
-                        state="normal",
-                        command=lambda: self._start_bg_download(l, u))
-                self.after(0, _show_update)
-            else:
-                def _show_uptodate():
-                    self._upd_btn.configure(text="✓  Up to date!",
-                                           fg_color="#1a4a1a", text_color="#88ff88",
-                                           state="normal")
-                    self.after(3000, lambda: self._upd_btn.configure(
-                        text="🔄  Check for Updates",
-                        fg_color=BG4, text_color=DIM2,
-                        command=self._manual_check_update))
-                self.after(0, _show_uptodate)
+            try:
+                latest, url = check_for_update()
+                if latest and version_newer(latest, APP_VERSION):
+                    def _found(l=latest, u=url):
+                        self._upd_btn.configure(
+                            text=f"⬇  Downloading v{l}...",
+                            fg_color=BG4, text_color=DIM2, state="disabled")
+                        self._run_update(l, u)
+                    self.after(0, _found)
+                else:
+                    def _uptodate():
+                        self._upd_btn.configure(text="✓  Up to date!",
+                                               fg_color="#1a4a1a", text_color="#88ff88",
+                                               state="normal")
+                        self.after(3000, lambda: self._upd_btn.configure(
+                            text="🔄  Check for Updates",
+                            fg_color=BG4, text_color=DIM2, state="normal",
+                            command=self._manual_check_update))
+                    self.after(0, _uptodate)
+            except Exception as e:
+                self.after(0, lambda: self._upd_btn.configure(
+                    text="⚠ Check failed", fg_color=BG4, text_color="#cc4444",
+                    state="normal"))
         threading.Thread(target=check, daemon=True).start()
 
     def _show_splash(self):
@@ -1063,100 +1096,6 @@ class App(ctk.CTk):
 
     # ── Window ─────────────────────────────────────────────────────────────────
     # ── Floating update panel ──────────────────────────────────────────────────
-    def _show_update_panel(self, version):
-        """Create or show the floating update panel (bottom-right, all pages)."""
-        # If already exists and visible with restart btn packed — just re-show
-        if hasattr(self, "_upd_panel") and self._upd_panel.winfo_exists():
-            self._upd_panel.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
-            if hasattr(self, "_upd_mini") and self._upd_mini.winfo_exists():
-                self._upd_mini.place_forget()
-            # Force re-render to ensure restart btn is visible if ready
-            self.update_idletasks()
-            return
-        panel = ctk.CTkFrame(self, fg_color=BG2, border_width=1,
-                             border_color=GOLD_DK, corner_radius=8, width=250)
-        self._upd_panel = panel
-        hdr = ctk.CTkFrame(panel, fg_color="transparent")
-        hdr.pack(fill="x", padx=10, pady=(10,2))
-        ctk.CTkLabel(hdr, text=f"⬇  Update v{version}",
-                     font=("Segoe UI",12,"bold"), text_color=GOLD_LT,
-                     fg_color="transparent").pack(side="left")
-        ctk.CTkButton(hdr, text="×", width=22, height=22, font=("Segoe UI",13),
-                      fg_color="transparent", text_color=DIM2, hover_color=BG4,
-                      command=self._hide_update_panel).pack(side="right")
-        self._upd_status_lbl = ctk.CTkLabel(panel, text="Downloading...",
-                                             font=("Segoe UI",11), text_color=DIM2,
-                                             fg_color="transparent")
-        self._upd_status_lbl.pack(padx=10, pady=(0,4))
-        bar_bg = ctk.CTkFrame(panel, fg_color=BG4, height=8, corner_radius=4)
-        bar_bg.pack(fill="x", padx=10, pady=(0,4))
-        bar_bg.pack_propagate(False)
-        self._upd_bar_fill = ctk.CTkFrame(bar_bg, fg_color=GOLD, height=8,
-                                          corner_radius=4, width=0)
-        self._upd_bar_fill.place(x=0, y=0, relheight=1, width=0)
-        self._upd_bar_bg = bar_bg
-        self._upd_pct_lbl = ctk.CTkLabel(panel, text="", font=("Segoe UI",10),
-                                          text_color=DIM2, fg_color="transparent")
-        self._upd_pct_lbl.pack(pady=(0,4))
-        self._upd_restart_btn = ctk.CTkButton(
-            panel, text="⟳  Restart to Update", width=210, height=32,
-            fg_color=GOLD, text_color="#050505", hover_color=GOLD_LT,
-            font=("Segoe UI",12,"bold"), corner_radius=6,
-            command=self._do_restart_and_update)
-        ctk.CTkFrame(panel, fg_color="transparent", height=4).pack()
-        panel.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
-        self._upd_mini = ctk.CTkButton(
-            self, text="⬇", width=36, height=36, font=("Segoe UI",16),
-            fg_color=GOLD, text_color="#050505", hover_color=GOLD_LT,
-            corner_radius=18, command=lambda: self._show_update_panel(version))
-
-    def _hide_update_panel(self):
-        if hasattr(self, "_upd_panel") and self._upd_panel.winfo_exists():
-            self._upd_panel.place_forget()
-        if hasattr(self, "_upd_mini") and self._upd_mini.winfo_exists():
-            self._upd_mini.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
-
-    def _upd_panel_progress(self, done, total, msg):
-        if not hasattr(self, "_upd_bar_fill"): return
-        try:
-            pct = done / max(1, total)
-            bar_w = self._upd_bar_bg.winfo_width()
-            self._upd_bar_fill.place(x=0, y=0, relheight=1, width=max(4, int(bar_w * pct)))
-            self._upd_status_lbl.configure(text=msg[:40])
-            if total > 1:
-                self._upd_pct_lbl.configure(
-                    text=f"{done/1024/1024:.1f} / {total/1024/1024:.1f} MB  ({int(pct*100)}%)")
-        except Exception: pass
-
-    def _upd_panel_ready(self):
-        if not hasattr(self, "_upd_status_lbl"): return
-        try:
-            self._upd_status_lbl.configure(text="Ready to install ✓", text_color="#80c080")
-            self._upd_pct_lbl.configure(text="")
-            self._upd_bar_fill.configure(fg_color="#80c080")
-            # Force render before reading dimensions
-            self.update_idletasks()
-            bar_w = self._upd_bar_bg.winfo_width()
-            if bar_w < 10: bar_w = 220  # fallback if not yet rendered
-            self._upd_bar_fill.place(x=0, y=0, relheight=1, width=bar_w)
-            # Unpack first to avoid duplicate pack
-            try: self._upd_restart_btn.pack_forget()
-            except: pass
-            self._upd_restart_btn.pack(padx=10, pady=(0,10))
-            # Ensure panel is visible
-            if hasattr(self, "_upd_panel") and self._upd_panel.winfo_exists():
-                self._upd_panel.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
-                self._upd_panel.lift()
-        except Exception as e:
-            print(f"[UPD] panel_ready error: {e}")
-
-    def _upd_panel_error(self, msg):
-        if not hasattr(self, "_upd_status_lbl"): return
-        try:
-            self._upd_status_lbl.configure(text=f"⚠ {msg[:50]}", text_color="#cc4444")
-            self._upd_pct_lbl.configure(text="")
-        except Exception: pass
-
     def _build(self):
         splash = self._show_splash()
         self.geometry("1440x920"); self.minsize(1100,720)
