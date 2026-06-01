@@ -123,8 +123,14 @@ BONUS_SYMBOLS = {
     "respawn":    "⚡",
     "gold_loot":  "💰",
     "experience": "⭐",
-    "vendor":     "🪙",
-    "crafting":   "🔨",
+}
+
+BONUS_ICONS = {
+    "sanctuary":  "bonus_sanctuary.png",
+    "challenger": "bonus_challenger.png",
+    "respawn":    "bonus_respawn.png",
+    "gold_loot":  "bonus_gold_loot.png",
+    "experience": "bonus_experience.png",
 }
 
 CAT_ICONS = {
@@ -1397,13 +1403,6 @@ class App(ctk.CTk):
         try:
             tv = self._act_tv
             tv.delete(*tv.get_children())
-            # Load bonus icons once — 16x16, kept on self to prevent GC
-            if not getattr(self, "_tree_bonus_photos", None):
-                self._tree_bonus_photos = {}
-                for btype, fname in self.BONUS_ICONS.items():
-                    ph = make_photo(fname, (16,16), transparent=True)
-                    if ph:
-                        self._tree_bonus_photos[btype] = ph
             # Store bonus info for tooltips
             self._tree_bonus_map = {}  # iid -> (label, value)
             tv.insert("","end",iid="All",        text="   ◆   All")
@@ -1604,12 +1603,12 @@ class App(ctk.CTk):
         bonus_type = sess_bonus.get("type","") if sess_bonus else ""
         # Pre-load bonus photo (32x32 for row display)
         bonus_photo = None
-        if sess_bonus and bonus_type in self.BONUS_ICONS:
+        if sess_bonus and bonus_type in BONUS_ICONS:
             key = (bonus_type, "row")
             if key not in getattr(self, "_row_bonus_photos", {}):
                 if not hasattr(self, "_row_bonus_photos"):
                     self._row_bonus_photos = {}
-                ph = make_photo(self.BONUS_ICONS[bonus_type], (32,32), transparent=True)
+                ph = make_photo(BONUS_ICONS[bonus_type], (32,32), transparent=True)
                 if ph:
                     self._row_bonus_photos[key] = ph
             bonus_photo = getattr(self, "_row_bonus_photos", {}).get(key)

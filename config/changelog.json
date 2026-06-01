@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.64.11",
+    "date": "2026-06-01",
+    "changes": [
+      { "type": "BUG FIX", "text": "Ajout de BONUS_ICONS manquant (icônes PNG colonne Bonus sessions)" },
+      { "type": "BUG FIX", "text": "Suppression bloc _tree_bonus_photos inutile (causait arbre Activities vide)" },
+      { "type": "IMPROVEMENT", "text": "Retrait bonus vendor et crafting (non utilisés)" }
+    ]
+  },
+  {
     "version": "0.64.10",
     "date": "2026-06-01",
     "changes": [
