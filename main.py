@@ -804,6 +804,36 @@ class App(ctk.CTk):
         except Exception:
             return {}
 
+    def _get_bonus_for_session(self, s):
+        """Return bonus dict for a session based on its location and week, or None."""
+        if not self.bonuses_db:
+            return None
+        location = s.get("location")
+        if not location:
+            return None
+        # Get week key from session start date
+        start = s.get("start")
+        if start:
+            try:
+                week_key = start.strftime("%G-W%V")
+            except Exception:
+                week_key = None
+        else:
+            week_key = None
+        # Try session's own week first, then current week, then latest
+        bonuses = None
+        if week_key and week_key in self.bonuses_db:
+            bonuses = self.bonuses_db[week_key]
+        else:
+            bonuses = self._get_current_bonuses()
+        if not bonuses:
+            return None
+        base = re.sub(r'\s+Lv-\d+$', '', location).strip()
+        for k, v in bonuses.items():
+            if k.lower() in base.lower() or base.lower() in k.lower():
+                return v
+        return None
+
     def _refresh_act_tree(self):
         """Refresh the activities tree after bonus data update."""
         try:

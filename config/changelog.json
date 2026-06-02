@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.64.12",
+    "date": "2026-06-02",
+    "changes": [
+      { "type": "BUG FIX", "text": "Ajout de _get_bonus_for_session manquant (sessions ne s'affichaient pas)" }
+    ]
+  },
+  {
     "version": "0.64.11",
     "date": "2026-06-01",
     "changes": [
