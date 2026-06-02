@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.64.14",
+    "date": "2026-06-02",
+    "changes": [
+      { "type": "BUG FIX", "text": "Colonnes Harvest et Exp toujours visibles — largeurs réduites pour tenir dans la fenêtre" },
+      { "type": "BUG FIX", "text": "Message de fin de chargement s'affiche correctement après fermeture du modal (grab_set conflict)" }
+    ]
+  },
+  {
     "version": "0.64.13",
     "date": "2026-06-02",
     "changes": [

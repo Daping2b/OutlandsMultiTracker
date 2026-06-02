@@ -1572,16 +1572,16 @@ class App(ctk.CTk):
     COL_GAP = 4
     COLS=[
         ("",         "",           None,                               40),
-        ("player",   "Player",     "woodenshield.png",                110),
-        ("type",     "Type",       "tinkering_globe.png",             165),
-        ("date",     "Date",       "carpentrycraftingmanual.png",     115),
+        ("player",   "Player",     "woodenshield.png",                100),
+        ("type",     "Type",       "tinkering_globe.png",             155),
+        ("date",     "Date",       "carpentrycraftingmanual.png",     105),
         ("dur",      "Dur.",       "tinkering_clock.png",              68),
         ("golds",    "Golds",      "goldpile.png",                    105),
-        ("doubloons","Doubloons",  "doubloons1.png",                  115),
+        ("doubloons","Doubloons",  "doubloons1.png",                  105),
         ("rare",     "Rare",       "arcanescroll1.png",                80),
         ("bonus",    "Bonus",      "bonus_experience.png",             90),
-        ("harvest",  "Harvest",    "hatchetiron1.png",                 95),
-        ("exp",      "Exp",        "chromaticcore1.png",              110),
+        ("harvest",  "Harvest",    "hatchetiron1.png",                 85),
+        ("exp",      "Exp",        "chromaticcore1.png",              100),
     ]
 
     def _draw_header(self):
@@ -1826,7 +1826,10 @@ class App(ctk.CTk):
         try: modal.destroy()
         except: pass
         self._refresh()
-        messagebox.showinfo("Done",f"{total_s} session(s) chargée(s)  (+{new_s} nouvelle(s))\n{total_files} fichier(s) log analysé(s).")
+        def _show():
+            self.lift(); self.focus_force()
+            messagebox.showinfo("Done",f"{total_s} session(s) chargée(s)  (+{new_s} nouvelle(s))\n{total_files} fichier(s) log analysé(s).")
+        self.after(150, _show)
 
     def _selected(self): return [s for (var,s) in self._sel.values() if var.get()]
 
