@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.64.13",
+    "date": "2026-06-02",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Message de chargement : affiche le total de sessions + nouvelles entre parenthèses" },
+      { "type": "BUG FIX", "text": "Flèche expand session (▶) toujours visible — packée avant les colonnes" }
+    ]
+  },
+  {
     "version": "0.64.12",
     "date": "2026-06-02",
     "changes": [

@@ -1622,6 +1622,20 @@ class App(ctk.CTk):
         stype=type_display(s); dt=session_date(s); bg=ROW_A if idx%2==0 else ROW_B
         outer=ctk.CTkFrame(self._inner,fg_color=BG,corner_radius=0); outer.pack(fill="x",pady=1)
         row=ctk.CTkFrame(outer,fg_color=bg,corner_radius=3); row.pack(fill="x")
+        # Pack expand button FIRST (side=right) so it's always visible
+        eb=ctk.CTkButton(row,text="\u25b6",width=30,height=30,fg_color="transparent",text_color=DIM2,hover_color=BG4,font=F_BODY)
+        eb.pack(side="right",padx=6)
+        detail=ctk.CTkFrame(outer,fg_color=BG,corner_radius=0); state=[False]
+        spacer=ctk.CTkFrame(outer,fg_color=BG3,height=3,corner_radius=0)
+        def toggle(df=detail,st=state,btn=eb,sess=s,sp=spacer):
+            if st[0]:
+                df.pack_forget(); sp.pack_forget()
+                btn.configure(text="\u25b6"); st[0]=False
+            else:
+                df.pack(fill="x",pady=(1,0)); sp.pack(fill="x")
+                btn.configure(text="\u25bc"); st[0]=True
+                if not df.winfo_children(): self._populate_detail(df,sess)
+        eb.configure(command=toggle)
         var=tk.BooleanVar(); self._sel[id(s)]=(var,s)
         gap=self.COL_GAP; w0=self.COLS[0][3]
         ctk.CTkCheckBox(row,variable=var,text="",width=w0,height=28,
@@ -1673,20 +1687,6 @@ class App(ctk.CTk):
                 lbl = ctk.CTkLabel(row, text=text, width=cw, text_color=TEXT, font=F_BODY,
                                    justify="center", wraplength=cw-4 if wrap else 0)
                 lbl.pack(side="left", padx=(gap,0), pady=2)
-        eb=ctk.CTkButton(row,text="▶",width=30,height=30,fg_color="transparent",text_color=DIM2,hover_color=BG4,font=F_BODY)
-        eb.pack(side="right",padx=6)
-        detail=ctk.CTkFrame(outer,fg_color=BG,corner_radius=0); state=[False]
-        # Spacer shown when detail is open
-        spacer=ctk.CTkFrame(outer,fg_color=BG3,height=3,corner_radius=0)
-        def toggle(df=detail,st=state,btn=eb,sess=s,sp=spacer):
-            if st[0]:
-                df.pack_forget(); sp.pack_forget()
-                btn.configure(text="▶"); st[0]=False
-            else:
-                df.pack(fill="x",pady=(1,0)); sp.pack(fill="x")
-                btn.configure(text="▼"); st[0]=True
-                if not df.winfo_children(): self._populate_detail(df,sess)
-        eb.configure(command=toggle)
 
     def _populate_detail(self,frame,s):
         brow=ctk.CTkFrame(frame,fg_color="transparent",height=42); brow.pack(fill="x",pady=(4,2),padx=8)
@@ -1810,7 +1810,6 @@ class App(ctk.CTk):
             self.after(0,lambda:modal.update_progress(done,total,fname))
         def do_load():
             raw_known=self.sess_db.get("known_files",[])
-            # Migrate: strip absolute paths to filename only
             known=set(Path(f).name if (os.sep in f or "/" in f) else f for f in raw_known)
             new_s,new_x=parse_logs(files,self.dung_data,self.wild_data,known,progress_cb)
             self.sessions.extend(new_s); self.xp_events.extend(new_x)
@@ -1819,14 +1818,15 @@ class App(ctk.CTk):
             save_json(SESSIONS_F,self.sess_db)
             self.xp_db["events"]=self._ser_xp(self.xp_events)
             save_json(XP_F,self.xp_db)
-            self.after(0,lambda:self._load_done(modal,len(new_s),len(files)))
+            total_s=len(self.sessions)
+            self.after(0,lambda ns=len(new_s),ts=total_s,tf=len(files):self._load_done(modal,ns,ts,tf))
         threading.Thread(target=do_load,daemon=True).start()
 
-    def _load_done(self,modal,new_s,total):
+    def _load_done(self,modal,new_s,total_s,total_files):
         try: modal.destroy()
         except: pass
         self._refresh()
-        messagebox.showinfo("Done",f"Loaded {new_s} new session(s) from {total} log file(s).")
+        messagebox.showinfo("Done",f"{total_s} session(s) chargée(s)  (+{new_s} nouvelle(s))\n{total_files} fichier(s) log analysé(s).")
 
     def _selected(self): return [s for (var,s) in self._sel.values() if var.get()]
 
