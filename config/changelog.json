@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.64.15",
+    "date": "2026-06-02",
+    "changes": [
+      { "type": "BUG FIX", "text": "Sessions disparues — largeurs vals désynchronisées avec COLS, maintenant lues dynamiquement depuis self.COLS" }
+    ]
+  },
+  {
     "version": "0.64.14",
     "date": "2026-06-02",
     "changes": [

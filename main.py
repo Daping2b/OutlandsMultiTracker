@@ -1658,16 +1658,16 @@ class App(ctk.CTk):
             bonus_photo = getattr(self, "_row_bonus_photos", {}).get(key)
 
         vals=[
-            (s.get("player","?"), 110, False),
-            (stype,               165, True),
-            (dt,                  115, False),
-            (fmt_dur(mins),        68, False),
-            (f"{gold:,}\n({rate(gold,mins)})",   105, False),
-            (f"{doub:,}\n({rate(doub,mins)})",   115, False),
-            (f"{rare}\n({rate(rare,mins)})",      80, False),
-            (None,                 90, False),  # bonus — handled separately
-            (f"{harv:,}\n({rate(harv,mins)})",    95, False),
-            (f"{exp:,.0f}\n({rate(exp,mins)})",  110, False),
+            (s.get("player","?"), self.COLS[1][3], False),
+            (stype,               self.COLS[2][3], True),
+            (dt,                  self.COLS[3][3], False),
+            (fmt_dur(mins),       self.COLS[4][3], False),
+            (f"{gold:,}\n({rate(gold,mins)})",    self.COLS[5][3], False),
+            (f"{doub:,}\n({rate(doub,mins)})",    self.COLS[6][3], False),
+            (f"{rare}\n({rate(rare,mins)})",       self.COLS[7][3], False),
+            (None,                                 self.COLS[8][3], False),  # bonus
+            (f"{harv:,}\n({rate(harv,mins)})",    self.COLS[9][3], False),
+            (f"{exp:,.0f}\n({rate(exp,mins)})",   self.COLS[10][3], False),
         ]
         for i,(text,cw,wrap) in enumerate(vals):
             if i == 7:
