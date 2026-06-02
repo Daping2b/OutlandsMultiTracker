@@ -1503,6 +1503,28 @@ class App(ctk.CTk):
             try: self._tv_tip.withdraw()
             except: pass
 
+    def _row_tip_show(self, event, text):
+        """Show tooltip for bonus icon in session rows."""
+        try:
+            if not hasattr(self, "_tv_tip") or not self._tv_tip:
+                self._tv_tip = tk.Toplevel(self)
+                self._tv_tip.wm_overrideredirect(True)
+                self._tv_tip.attributes("-topmost", True)
+                self._tv_tip_lbl = tk.Label(self._tv_tip, background="#1a1a1a",
+                                            foreground=GOLD_LT, font=F_SMALL,
+                                            relief="solid", borderwidth=1, padx=6, pady=3)
+                self._tv_tip_lbl.pack()
+            self._tv_tip_lbl.configure(text=text)
+            self._tv_tip.wm_geometry(f"+{event.x_root+14}+{event.y_root+6}")
+            self._tv_tip.deiconify()
+        except Exception:
+            pass
+
+    def _row_tip_hide(self, event):
+        if hasattr(self, "_tv_tip") and self._tv_tip:
+            try: self._tv_tip.withdraw()
+            except: pass
+
     def _on_act(self,_):
         sel=self._act_tv.selection()
         if sel: self._act_f=sel[0]; self._refresh()
@@ -1560,7 +1582,9 @@ class App(ctk.CTk):
         self._sel={}
         ss=self._filtered(ignore_dates=ignore_dates)
         self._draw_header()
-        for i,s in enumerate(ss): self._draw_row(i,s)
+        for i,s in enumerate(ss):
+            try: self._draw_row(i,s)
+            except Exception as e: print(f"[ROW] draw error: {e}")
 
     def _set_char(self,n): self._char_f=n; self._refresh()
     def _sort_by(self, col):
@@ -1679,7 +1703,9 @@ class App(ctk.CTk):
                     ico_lbl = ctk.CTkLabel(cell, image=bonus_photo, text="",
                                            fg_color="transparent", width=cw)
                     ico_lbl.pack(expand=True)
-                    self._add_tooltip(ico_lbl, f"{sess_bonus.get('label','')}  {sess_bonus.get('value','')}")
+                    tip_text = f"{sess_bonus.get('label','')}  {sess_bonus.get('value','')}"
+                    ico_lbl.bind("<Enter>", lambda e, t=tip_text: self._row_tip_show(e, t))
+                    ico_lbl.bind("<Leave>", self._row_tip_hide)
                 else:
                     ctk.CTkLabel(cell, text="—", width=cw, text_color=DIM2,
                                  font=F_BODY, justify="center").pack(expand=True)

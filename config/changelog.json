@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.64.16",
+    "date": "2026-06-02",
+    "changes": [
+      { "type": "BUG FIX", "text": "Toutes les sessions s'affichent — crash _add_tooltip résolu, boucle rows protégée par try/except" },
+      { "type": "BUG FIX", "text": "Colonnes Harvest et Exp toujours rendues — plus interrompues par le crash bonus" },
+      { "type": "NEW FEATURE", "text": "Tooltip hover sur icône bonus dans les rows de session" }
+    ]
+  },
+  {
     "version": "0.64.15",
     "date": "2026-06-02",
     "changes": [
