@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.65.4",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Patch Notes — each major version in its own visual panel" },
+      { "type": "BUG FIX", "text": "XP outside sessions now tracked — fixed" },
+      { "type": "IMPROVEMENT", "text": "Faster startup — pages built on first visit (lazy loading)" },
+      { "type": "IMPROVEMENT", "text": "How To — Dungeons tip moved to Tips & Tricks" }
+    ]
+  },
+  {
     "version": "0.65.3",
     "date": "2026-06-05",
     "changes": [

@@ -34,8 +34,7 @@
         "Farm as normal",
         "Return to your room/house with your loot bag full, then run the END script",
         "Disconnect the game for the log to be created",
-        "Click LOAD LOGS in the app — all sessions appear automatically",
-        "Dungeons are detected automatically from your in-game coordinates (no manual input needed)"
+        "Click LOAD LOGS in the app — all sessions appear automatically"
       ]
     },
     {
@@ -49,7 +48,7 @@
         "Multiple characters are fully supported — each gets its own tab",
         "Use the date range calendar filters to focus on specific farming periods",
         "Select multiple sessions with the checkboxes to export or share them together",
-        "All How To text is editable in config/howto_content.json"
+        "Dungeons are detected automatically from your in-game coordinates (no manual input needed)"
       ]
     }
   ],

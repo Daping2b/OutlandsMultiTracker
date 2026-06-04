@@ -328,6 +328,14 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
             if is_razor and "═ RECORDING" in msg and "▶" in msg:
                 cur={"player":get_player(ts),"type":"Unknown","start":ts,"end":None,"location":None,"loots":{},"aspects":{}}
                 asp_first={}; continue
+            xp_m=re.search(r'\(([\w ]+?) Aspect ([\d,\.]+)/([\d,]+) xp\)',msg)
+            if xp_m:
+                asp=xp_m.group(1); xp_cur=float(xp_m.group(2).replace(",","")); xp_max=float(xp_m.group(3).replace(",",""))
+                player=cur.get("player","") if cur else get_player(ts)
+                xp_events.append({"ts":ts,"player":player,"aspect":asp,"xp_cur":xp_cur,"xp_max":xp_max})
+                if cur is not None:
+                    asp_first.setdefault(asp,(xp_cur,xp_max))
+                    cur["aspects"][asp]=(xp_cur,xp_max,asp_first[asp])
             if cur is None: continue
             if is_razor and "◆" in msg:
                 stype=msg.replace("◆","").strip()
@@ -348,13 +356,6 @@ def parse_logs(log_files, dung, wild, known_ids, progress_cb=None):
                     cat=categorise_item(iname)
                     cur["loots"].setdefault(cat,{})
                     cur["loots"][cat][iname]=cur["loots"][cat].get(iname,0)+qty
-            xp_m=re.search(r'\(([\w ]+?) Aspect ([\d,\.]+)/([\d,]+) xp\)',msg)
-            if xp_m:
-                asp=xp_m.group(1); xp_cur=float(xp_m.group(2).replace(",","")); xp_max=float(xp_m.group(3).replace(",",""))
-                player=cur.get("player","")
-                xp_events.append({"ts":ts,"player":player,"aspect":asp,"xp_cur":xp_cur,"xp_max":xp_max})
-                asp_first.setdefault(asp,(xp_cur,xp_max))
-                cur["aspects"][asp]=(xp_cur,xp_max,asp_first[asp])
             # Parse gold/doubloons from bank deposits (happen during session or after END)
             if author=="System":
                 gm=re.search(r'You deposit ([\d,]+) gold into your bank',msg)
@@ -1248,10 +1249,8 @@ class App(ctk.CTk):
         self._body.pack(fill="both",expand=True)
         self._build_home()
         self._build_log()
-        self._build_xp()
-        self._build_guild()
-        self._build_howto()
-        self._build_settings()
+        # Lazy: other pages built on first visit
+        self._built_pages = {"Home", "Log Analysis"}
         self._show("Home")
         try: splash.destroy()
         except: pass
@@ -1265,11 +1264,23 @@ class App(ctk.CTk):
         self.update()
 
     def _show(self,name):
+        # Lazy build on first visit
+        if name not in self._built_pages:
+            builders = {
+                "Experience": self._build_xp,
+                "Guild":      self._build_guild,
+                "How To":     self._build_howto,
+                "Settings":   self._build_settings,
+            }
+            if name in builders:
+                builders[name]()
+                self._built_pages.add(name)
         for n,f in self._pages.items():
             f.pack_forget()
             btn=self._tb.get(n)
             if btn: btn.configure(text_color=DIM2,fg_color=BG4,border_color=BORDER)
-        self._pages[name].pack(fill="both",expand=True)
+        if name in self._pages:
+            self._pages[name].pack(fill="both",expand=True)
         btn=self._tb.get(name)
         if btn: btn.configure(text_color=GOLD_LT,fg_color=ACCENT,border_color=GOLD_DK)
 
@@ -1356,16 +1367,30 @@ class App(ctk.CTk):
 
             for g_idx, (major, entries) in enumerate(groups.items()):
                 is_latest = (g_idx == 0)
-                vrow=ctk.CTkFrame(news,fg_color="transparent"); vrow.pack(fill="x",padx=20,pady=(12,2))
-                ctk.CTkLabel(vrow,text=f"v{major}",
-                             font=("Segoe UI",14,"bold"),text_color=GOLD,width=65,anchor="w").pack(side="left")
+                # Each major version = its own bordered panel
+                panel_border = ctk.CTkFrame(news, fg_color=GOLD_DK if is_latest else BORDER,
+                                            corner_radius=6)
+                panel_border.pack(fill="x", padx=16, pady=(10,4))
+                panel = ctk.CTkFrame(panel_border, fg_color=BG4, corner_radius=5)
+                panel.pack(fill="both", expand=True, padx=1, pady=1)
+
+                # Panel header
+                hdr = ctk.CTkFrame(panel, fg_color=BG3, corner_radius=0, height=32)
+                hdr.pack(fill="x"); hdr.pack_propagate(False)
+                ctk.CTkLabel(hdr, text=f"  v{major}",
+                             font=("Segoe UI",14,"bold"), text_color=GOLD,
+                             anchor="w").pack(side="left", padx=(8,0))
                 if is_latest:
-                    ctk.CTkLabel(vrow,text=" ❆ NEW",font=("Segoe UI",11,"bold"),
-                                 text_color="#00dd88").pack(side="left",padx=(0,8))
+                    ctk.CTkLabel(hdr, text="❆ NEW", font=("Segoe UI",11,"bold"),
+                                 text_color="#00dd88").pack(side="left", padx=(6,0))
                 date = entries[0].get("date","")
                 if date:
-                    ctk.CTkLabel(vrow,text=date,font=("Segoe UI",12),text_color=DIM2).pack(side="left",padx=8)
+                    ctk.CTkLabel(hdr, text=date, font=("Segoe UI",11),
+                                 text_color=DIM2).pack(side="left", padx=8)
+                ctk.CTkFrame(panel, fg_color=GOLD_DK if is_latest else BORDER, height=1,
+                             corner_radius=0).pack(fill="x")
 
+                # Collect all changes grouped by category
                 cat_items = OrderedDict()
                 for entry in entries:
                     changes = entry.get("changes",[])
@@ -1382,15 +1407,15 @@ class App(ctk.CTk):
                             cat_items[cat].extend(items)
 
                 for cat, items in cat_items.items():
-                    ctk.CTkLabel(news, text=f"    {cat}",
+                    ctk.CTkLabel(panel, text=f"    {cat}",
                                  font=("Segoe UI",11,"bold"),
                                  text_color=CAT_COLORS.get(cat, DIM2),
-                                 anchor="w").pack(fill="x", padx=20, pady=(6,1))
+                                 anchor="w").pack(fill="x", padx=12, pady=(6,1))
                     for item in items:
-                        ctk.CTkLabel(news, text=f"      •  {item}", font=("Segoe UI",13),
-                                     text_color=TEXT, anchor="w", wraplength=820).pack(fill="x", padx=20, pady=1)
+                        ctk.CTkLabel(panel, text=f"      •  {item}", font=("Segoe UI",13),
+                                     text_color=TEXT, anchor="w", wraplength=820).pack(fill="x", padx=12, pady=1)
+                ctk.CTkFrame(panel, height=6, fg_color="transparent").pack()
 
-                ctk.CTkFrame(news,fg_color=BG5,height=1).pack(fill="x",padx=20,pady=8)
         ctk.CTkFrame(news,height=8,fg_color="transparent").pack()
         ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=60,pady=(8,20))
 
