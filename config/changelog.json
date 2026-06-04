@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.65",
+    "date": "2026-06-02",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Added Chain Mastery Experience tracking — displays total chained XP per session (XP × 50), with per-minute rate and smart formatting (k/M above 100k)" }
+    ]
+  },
+  {
     "version": "0.64.16",
     "date": "2026-06-02",
     "changes": [

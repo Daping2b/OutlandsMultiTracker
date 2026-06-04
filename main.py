@@ -395,6 +395,11 @@ def s_rare(s):    return sum(q for c,it in s.get("loots",{}).items() if c in RAR
 def s_junk(s):    return sum(q for c,it in s.get("loots",{}).items() if c in JUNK_CATS    for q in it.values())
 def s_harvest(s): return sum(q for c,it in s.get("loots",{}).items() if c in HARVEST_CATS for q in it.values())
 def s_exp(s):     return sum(s.get("aspects_gained",{}).values())
+def s_chain(s):   return s_exp(s) * 50
+def fmt_chain(v):
+    if v >= 1_000_000: return f"{v/1_000_000:.1f}M"
+    if v >= 100_000:   return f"{v/1_000:.0f}k"
+    return f"{v:,.0f}"
 def rate(total,mins):
     r=total/max(1,mins); return f"{r/1000:.1f}k/min" if r>=1000 else f"{r:.1f}/min"
 def fmt_dur(mins):
@@ -1606,6 +1611,7 @@ class App(ctk.CTk):
         ("bonus",    "Bonus",      "bonus_experience.png",             90),
         ("harvest",  "Harvest",    "hatchetiron1.png",                 85),
         ("exp",      "Exp",        "chromaticcore1.png",              100),
+        ("chain",    "Chain",      "chainbonus.png",                   90),
     ]
 
     def _draw_header(self):
@@ -1643,6 +1649,7 @@ class App(ctk.CTk):
 
     def _draw_row(self,idx,s):
         mins=dur_min(s); gold,doub,rare,junk,harv,exp=s_gold(s),s_doub(s),s_rare(s),s_junk(s),s_harvest(s),s_exp(s)
+        chain=s_chain(s)
         stype=type_display(s); dt=session_date(s); bg=ROW_A if idx%2==0 else ROW_B
         outer=ctk.CTkFrame(self._inner,fg_color=BG,corner_radius=0); outer.pack(fill="x",pady=1)
         row=ctk.CTkFrame(outer,fg_color=bg,corner_radius=3); row.pack(fill="x")
@@ -1692,6 +1699,7 @@ class App(ctk.CTk):
             (None,                                 self.COLS[8][3], False),  # bonus
             (f"{harv:,}\n({rate(harv,mins)})",    self.COLS[9][3], False),
             (f"{exp:,.0f}\n({rate(exp,mins)})",   self.COLS[10][3], False),
+            (f"{fmt_chain(chain)}\n({fmt_chain(rate(chain,mins))}/min)", self.COLS[11][3], False),
         ]
         for i,(text,cw,wrap) in enumerate(vals):
             if i == 7:
