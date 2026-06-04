@@ -30,9 +30,10 @@
       "icon": "📖",
       "type": "bullets",
       "items": [
-        "Run the START script before heading out — auto-detects Harvesting, Boating or Creature Farming",
+        "Run the START script on spot — auto-detects Harvesting, Boating or Creature Farming",
         "Farm as normal",
-        "Return to your bank room with your loot bag full, then run the END script",
+        "Return to your room/house with your loot bag full, then run the END script",
+        "Disconnect the game for the log to be created",
         "Click LOAD LOGS in the app — all sessions appear automatically",
         "Dungeons are detected automatically from your in-game coordinates (no manual input needed)"
       ]
@@ -43,14 +44,11 @@
       "icon": "💡",
       "type": "bullets",
       "items": [
-        "Always run the END script from your bank room",
+        "Always run the END script from your room/house",
         "Keep a Copper Key in your backpack when using a Wooden Box as your loot bag",
         "Multiple characters are fully supported — each gets its own tab",
         "Use the date range calendar filters to focus on specific farming periods",
         "Select multiple sessions with the checkboxes to export or share them together",
-        "The version number can be changed in config/version.json without recompiling",
-        "The changelog on the Home page is editable in config/changelog.json",
-        "Dungeon polygons can be updated in config/Dungeon.json — no recompile needed",
         "All How To text is editable in config/howto_content.json"
       ]
     }

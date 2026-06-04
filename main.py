@@ -1340,50 +1340,57 @@ class App(ctk.CTk):
                      font=("Georgia",17,"bold"),text_color=GOLD_LT,anchor="w").pack(fill="x",padx=16,pady=(14,4))
         ctk.CTkFrame(news,fg_color=GOLD_DK,height=1).pack(fill="x",padx=16,pady=(0,10))
         changelog=load_json(CONFIG_DIR/"changelog.json",[])
+        CAT_COLORS = {"NEW FEATURE": "#00dd88", "IMPROVEMENT": GOLD_LT, "BUG FIX": "#cc6644"}
         if not changelog:
             ctk.CTkLabel(news,text="  No changelog available.",font=("Segoe UI",13),text_color=DIM2).pack(anchor="w",padx=20,pady=8)
         else:
-            for idx,entry in enumerate(changelog[:8]):
-                is_latest = (idx==0)
-                vrow=ctk.CTkFrame(news,fg_color="transparent"); vrow.pack(fill="x",padx=20,pady=(10,2))
-                # Version badge
-                ver_lbl=ctk.CTkLabel(vrow,text=f"v{entry.get('version','?')}",
-                             font=("Segoe UI",14,"bold"),text_color=GOLD,width=65,anchor="w")
-                ver_lbl.pack(side="left")
-                # NEW badge for latest entry
+            from collections import OrderedDict
+            groups = OrderedDict()
+            for entry in changelog:
+                ver = entry.get("version","?")
+                parts = ver.split(".")
+                major = ".".join(parts[:2]) if len(parts) >= 2 else ver
+                if major not in groups:
+                    groups[major] = []
+                groups[major].append(entry)
+
+            for g_idx, (major, entries) in enumerate(groups.items()):
+                is_latest = (g_idx == 0)
+                vrow=ctk.CTkFrame(news,fg_color="transparent"); vrow.pack(fill="x",padx=20,pady=(12,2))
+                ctk.CTkLabel(vrow,text=f"v{major}",
+                             font=("Segoe UI",14,"bold"),text_color=GOLD,width=65,anchor="w").pack(side="left")
                 if is_latest:
-                    ctk.CTkLabel(vrow,text=" ✦ NEW",font=("Segoe UI",11,"bold"),
+                    ctk.CTkLabel(vrow,text=" ❆ NEW",font=("Segoe UI",11,"bold"),
                                  text_color="#00dd88").pack(side="left",padx=(0,8))
-                ctk.CTkLabel(vrow,text=entry.get("date",""),font=("Segoe UI",12),text_color=DIM2).pack(side="left",padx=8)
-                # Author signature in red
-                author=entry.get("author","")
-                if author:
-                    ctk.CTkLabel(vrow,text=f"— {author}",
-                                 font=("Palatino Linotype",12,"bold","italic"),
-                                 text_color="#cc2222").pack(side="right",padx=8)
-                changes = entry.get("changes", {})
-                CAT_COLORS = {"NEW FEATURE": "#00dd88", "IMPROVEMENT": GOLD_LT, "BUG FIX": "#cc6644"}
-                if isinstance(changes, dict):
-                    for cat, items in changes.items():
-                        ctk.CTkLabel(news, text=f"    {cat}",
-                                     font=("Segoe UI", 11, "bold"),
-                                     text_color=CAT_COLORS.get(cat, DIM2),
-                                     anchor="w").pack(fill="x", padx=20, pady=(4,0))
-                        for item in items:
-                            ctk.CTkLabel(news, text=f"      •  {item}", font=("Segoe UI",13),
-                                         text_color=TEXT, anchor="w", wraplength=800).pack(fill="x", padx=20, pady=1)
-                elif isinstance(changes, list):
-                    for ch in changes:
-                        if isinstance(ch, dict):
-                            cat  = ch.get("type", "")
-                            text = ch.get("text", "")
-                            color = CAT_COLORS.get(cat, DIM2)
-                            ctk.CTkLabel(news, text=f"      •  {text}", font=("Segoe UI",13),
-                                         text_color=color, anchor="w", wraplength=800).pack(fill="x", padx=20, pady=2)
-                        else:
-                            ctk.CTkLabel(news, text=f"    •  {ch}", font=("Segoe UI",13),
-                                         text_color=TEXT, anchor="w", wraplength=800).pack(fill="x", padx=20, pady=2)
-                ctk.CTkFrame(news,fg_color=BG5,height=1).pack(fill="x",padx=20,pady=6)
+                date = entries[0].get("date","")
+                if date:
+                    ctk.CTkLabel(vrow,text=date,font=("Segoe UI",12),text_color=DIM2).pack(side="left",padx=8)
+
+                cat_items = OrderedDict()
+                for entry in entries:
+                    changes = entry.get("changes",[])
+                    if isinstance(changes, list):
+                        for ch in changes:
+                            if isinstance(ch, dict):
+                                cat  = ch.get("type","")
+                                text = ch.get("text","")
+                                if cat not in cat_items: cat_items[cat] = []
+                                cat_items[cat].append(text)
+                    elif isinstance(changes, dict):
+                        for cat, items in changes.items():
+                            if cat not in cat_items: cat_items[cat] = []
+                            cat_items[cat].extend(items)
+
+                for cat, items in cat_items.items():
+                    ctk.CTkLabel(news, text=f"    {cat}",
+                                 font=("Segoe UI",11,"bold"),
+                                 text_color=CAT_COLORS.get(cat, DIM2),
+                                 anchor="w").pack(fill="x", padx=20, pady=(6,1))
+                    for item in items:
+                        ctk.CTkLabel(news, text=f"      •  {item}", font=("Segoe UI",13),
+                                     text_color=TEXT, anchor="w", wraplength=820).pack(fill="x", padx=20, pady=1)
+
+                ctk.CTkFrame(news,fg_color=BG5,height=1).pack(fill="x",padx=20,pady=8)
         ctk.CTkFrame(news,height=8,fg_color="transparent").pack()
         ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=60,pady=(8,20))
 

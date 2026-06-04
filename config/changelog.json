@@ -1,9 +1,26 @@
 [
   {
+    "version": "0.65.3",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "How To — updated instructions to reflect on-spot START and room/house END" },
+      { "type": "IMPROVEMENT", "text": "How To — added disconnect step for log creation" },
+      { "type": "IMPROVEMENT", "text": "Tips & Tricks — removed internal config tips" },
+      { "type": "BUG FIX", "text": "END script — Crate loot detection fixed (dclick before getlabel)" }
+    ]
+  },
+  {
+    "version": "0.65.2",
+    "date": "2026-06-02",
+    "changes": [
+      { "type": "BUG FIX", "text": "Patch Notes display — fixed" }
+    ]
+  },
+  {
     "version": "0.65.1",
     "date": "2026-06-02",
     "changes": [
-      { "type": "BUG FIX", "text": "Patch Notes affiche correctement les entrées — type coloré, texte propre sans JSON brut" }
+      { "type": "BUG FIX", "text": "Patch Notes JSON raw display — fixed" }
     ]
   },
   {
@@ -17,226 +34,221 @@
     "version": "0.64.16",
     "date": "2026-06-02",
     "changes": [
-      { "type": "BUG FIX", "text": "Toutes les sessions s'affichent — crash _add_tooltip résolu, boucle rows protégée par try/except" },
-      { "type": "BUG FIX", "text": "Colonnes Harvest et Exp toujours rendues — plus interrompues par le crash bonus" },
-      { "type": "NEW FEATURE", "text": "Tooltip hover sur icône bonus dans les rows de session" }
+      { "type": "BUG FIX", "text": "Sessions not displaying — fixed" },
+      { "type": "BUG FIX", "text": "Harvest and Exp columns empty — fixed" },
+      { "type": "NEW FEATURE", "text": "Bonus icon tooltip on hover in session rows" }
     ]
   },
   {
     "version": "0.64.15",
     "date": "2026-06-02",
     "changes": [
-      { "type": "BUG FIX", "text": "Sessions disparues — largeurs vals désynchronisées avec COLS, maintenant lues dynamiquement depuis self.COLS" }
+      { "type": "BUG FIX", "text": "Sessions not displaying after column resize — fixed" }
     ]
   },
   {
     "version": "0.64.14",
     "date": "2026-06-02",
     "changes": [
-      { "type": "BUG FIX", "text": "Colonnes Harvest et Exp toujours visibles — largeurs réduites pour tenir dans la fenêtre" },
-      { "type": "BUG FIX", "text": "Message de fin de chargement s'affiche correctement après fermeture du modal (grab_set conflict)" }
+      { "type": "BUG FIX", "text": "Harvest and Exp columns hidden — fixed" },
+      { "type": "BUG FIX", "text": "Load done message not appearing — fixed" }
     ]
   },
   {
     "version": "0.64.13",
     "date": "2026-06-02",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "Message de chargement : affiche le total de sessions + nouvelles entre parenthèses" },
-      { "type": "BUG FIX", "text": "Flèche expand session (▶) toujours visible — packée avant les colonnes" }
+      { "type": "IMPROVEMENT", "text": "Load logs result shows total sessions and new count" },
+      { "type": "BUG FIX", "text": "Expand arrow hidden on session rows — fixed" }
     ]
   },
   {
     "version": "0.64.12",
     "date": "2026-06-02",
     "changes": [
-      { "type": "BUG FIX", "text": "Ajout de _get_bonus_for_session manquant (sessions ne s'affichaient pas)" }
+      { "type": "BUG FIX", "text": "Sessions not displaying — fixed" }
     ]
   },
   {
     "version": "0.64.11",
     "date": "2026-06-01",
     "changes": [
-      { "type": "BUG FIX", "text": "Ajout de BONUS_ICONS manquant (icônes PNG colonne Bonus sessions)" },
-      { "type": "BUG FIX", "text": "Suppression bloc _tree_bonus_photos inutile (causait arbre Activities vide)" },
-      { "type": "IMPROVEMENT", "text": "Retrait bonus vendor et crafting (non utilisés)" }
+      { "type": "BUG FIX", "text": "Activities tree empty — fixed" },
+      { "type": "IMPROVEMENT", "text": "Removed unused bonus types (vendor, crafting)" }
     ]
   },
   {
     "version": "0.64.10",
     "date": "2026-06-01",
     "changes": [
-      { "type": "BUG FIX", "text": "Ajout de BONUS_SYMBOLS manquant (crash au démarrage)" },
-      { "type": "BUG FIX", "text": "Ajout de _fetch_bonuses manquant (AttributeError au démarrage)" },
-      { "type": "BUG FIX", "text": "Ajout de _get_current_bonuses manquant (crash Activities tree)" }
+      { "type": "BUG FIX", "text": "App crash on startup — fixed" }
     ]
   },
   {
     "version": "0.64.9",
     "date": "2026-06-01",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "Système update entièrement réécrit" },
-      { "type": "IMPROVEMENT", "text": "Updater v4 optimisé" }
+      { "type": "IMPROVEMENT", "text": "Update system fully rewritten" },
+      { "type": "IMPROVEMENT", "text": "Updater v4 optimized" }
     ]
   },
   {
     "version": "0.64.8",
     "date": "2026-06-01",
     "changes": [
-      { "type": "NEW FEATURE", "text": "Auto-download update au démarrage" },
-      { "type": "NEW FEATURE", "text": "Panneau flottant de progression update" }
+      { "type": "NEW FEATURE", "text": "Auto-download update on startup" },
+      { "type": "NEW FEATURE", "text": "Floating update progress panel" }
     ]
   },
   {
     "version": "0.64.7",
     "date": "2026-06-01",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "Version auto injectée dans feedback modal" }
+      { "type": "IMPROVEMENT", "text": "App version auto-injected in feedback modal" }
     ]
   },
   {
     "version": "0.64.6",
     "date": "2026-06-01",
     "changes": [
-      { "type": "BUG FIX", "text": "Fix startup check update" },
-      { "type": "BUG FIX", "text": "Fix Discord 403 feedback" },
-      { "type": "BUG FIX", "text": "Fix panel_ready crash" }
+      { "type": "BUG FIX", "text": "Startup update check — fixed" },
+      { "type": "BUG FIX", "text": "Discord feedback 403 — fixed" },
+      { "type": "BUG FIX", "text": "Update panel ready state — fixed" }
     ]
   },
   {
     "version": "0.64.5",
     "date": "2026-06-01",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "Graphique XP amélioré (hauteur, grille, tooltip aspects, labels)" },
-      { "type": "IMPROVEMENT", "text": "Guild tab Coming Soon en rouge" }
+      { "type": "IMPROVEMENT", "text": "XP chart improved — grid, aspect tooltips, labels" },
+      { "type": "IMPROVEMENT", "text": "Guild tab Coming Soon styling" }
     ]
   },
   {
     "version": "0.64.4",
     "date": "2026-06-01",
     "changes": [
-      { "type": "BUG FIX", "text": "Fix tuple lambda dans _manual_check_update" }
+      { "type": "BUG FIX", "text": "Manual update check crash — fixed" }
     ]
   },
   {
     "version": "0.64.3",
     "date": "2026-06-01",
     "changes": [
-      { "type": "NEW FEATURE", "text": "Feedback modal intégré dans l'app (plus de navigateur)" }
+      { "type": "NEW FEATURE", "text": "Feedback modal integrated in-app" }
     ]
   },
   {
     "version": "0.64.2",
     "date": "2026-06-01",
     "changes": [
-      { "type": "BUG FIX", "text": "Fix _manual_check_update appelait _prompt_update supprimé" }
+      { "type": "BUG FIX", "text": "Manual update check calling removed function — fixed" }
     ]
   },
   {
     "version": "0.64.1",
     "date": "2026-06-01",
     "changes": [
-      { "type": "NEW FEATURE", "text": "Bouton Feedback dans la navigation" }
+      { "type": "NEW FEATURE", "text": "Feedback button added to navigation bar" }
     ]
   },
   {
-    "version": "0.64",
+    "version": "0.63",
     "date": "2026-05-31",
     "changes": [
-      { "type": "NEW FEATURE", "text": "Panneau update passif" },
-      { "type": "BUG FIX", "text": "Fix load logs massif — tous les fichiers marqués known" }
+      { "type": "NEW FEATURE", "text": "Passive update panel (first version)" }
     ]
   },
   {
     "version": "0.62.4",
     "date": "2026-05-31",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "All Time affiché au démarrage" }
+      { "type": "IMPROVEMENT", "text": "All Time view shown on startup" }
     ]
   },
   {
     "version": "0.62.3",
     "date": "2026-05-31",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "Updater v4, DETACHED_PROCESS simplifié" }
+      { "type": "IMPROVEMENT", "text": "Updater v4 — simplified process detach" }
     ]
   },
   {
     "version": "0.62.2",
     "date": "2026-05-31",
     "changes": [
-      { "type": "BUG FIX", "text": "Skip fichiers vides (0 bytes)" },
-      { "type": "BUG FIX", "text": "Fix known_ids via sessions_before" }
+      { "type": "BUG FIX", "text": "Empty log files causing crash — fixed" },
+      { "type": "BUG FIX", "text": "Known session IDs tracking — fixed" }
     ]
   },
   {
     "version": "0.62.1",
     "date": "2026-05-31",
     "changes": [
-      { "type": "BUG FIX", "text": "Fix critique known_ids (bug any())" }
+      { "type": "BUG FIX", "text": "Known IDs detection — fixed" }
     ]
   },
   {
     "version": "0.62",
     "date": "2026-05-31",
     "changes": [
-      { "type": "NEW FEATURE", "text": "Delete session : 3 boutons (session / permanent / cancel)" },
-      { "type": "NEW FEATURE", "text": "Filtrage items (potions, outils, consommables)" },
-      { "type": "IMPROVEMENT", "text": "Pre-extraction zip avant lancement updater" }
+      { "type": "NEW FEATURE", "text": "Delete session — 3 options (session / permanent / cancel)" },
+      { "type": "NEW FEATURE", "text": "Item filtering (potions, tools, consumables)" },
+      { "type": "IMPROVEMENT", "text": "Zip pre-extraction before updater launch" }
     ]
   },
   {
     "version": "0.61",
     "date": "2026-05-31",
     "changes": [
-      { "type": "BUG FIX", "text": "Fix parse_logs" },
-      { "type": "BUG FIX", "text": "Gold et doubloons depuis banque" },
-      { "type": "BUG FIX", "text": "XP multi-mots aspects" },
-      { "type": "BUG FIX", "text": "known_ids basé sur filename uniquement" }
+      { "type": "BUG FIX", "text": "Log parsing — fixed" },
+      { "type": "BUG FIX", "text": "Gold and doubloons from bank — fixed" },
+      { "type": "BUG FIX", "text": "Multi-word aspect XP parsing — fixed" }
     ]
   },
   {
     "version": "0.60.2",
     "date": "2026-05-30",
     "changes": [
-      { "type": "NEW FEATURE", "text": "Ossuary Lv-4 ajouté aux coordonnées donjons" }
+      { "type": "NEW FEATURE", "text": "Ossuary Lv-4 added to dungeon locations" }
     ]
   },
   {
     "version": "0.60.1",
     "date": "2026-05-30",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "Fetch bonus via API GitHub (bypass CDN cache)" }
+      { "type": "IMPROVEMENT", "text": "Bonus fetch via GitHub API (bypass CDN cache)" }
     ]
   },
   {
     "version": "0.60",
     "date": "2026-05-30",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "os._exit(0) pour fermeture instantanée" },
-      { "type": "IMPROVEMENT", "text": "Updater polling 50ms" }
+      { "type": "IMPROVEMENT", "text": "Instant app close on update (os._exit)" },
+      { "type": "IMPROVEMENT", "text": "Updater polling optimized (50ms)" }
     ]
   },
   {
     "version": "0.59.10",
     "date": "2026-05-30",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "Symboles bonus affichés à la fin du nom de donjon" }
+      { "type": "IMPROVEMENT", "text": "Bonus symbols shown at end of dungeon name in tree" }
     ]
   },
   {
     "version": "0.59",
     "date": "2026-05-30",
     "changes": [
-      { "type": "IMPROVEMENT", "text": "Stability pass général" },
-      { "type": "IMPROVEMENT", "text": "Activities tree refonte" }
+      { "type": "IMPROVEMENT", "text": "General stability pass" },
+      { "type": "IMPROVEMENT", "text": "Activities tree redesign" }
     ]
   },
   {
     "version": "0.52",
     "date": "2026-05-30",
     "changes": [
-      { "type": "NEW FEATURE", "text": "Guild nav" },
-      { "type": "NEW FEATURE", "text": "Bonus icons" },
+      { "type": "NEW FEATURE", "text": "Guild tab added to navigation" },
+      { "type": "NEW FEATURE", "text": "Bonus icons in activities tree" },
       { "type": "IMPROVEMENT", "text": "Patch Notes redesign" }
     ]
   }
