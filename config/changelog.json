@@ -1,9 +1,16 @@
 [
   {
+    "version": "0.65.1",
+    "date": "2026-06-02",
+    "changes": [
+      { "type": "BUG FIX", "text": "Patch Notes affiche correctement les entrées — type coloré, texte propre sans JSON brut" }
+    ]
+  },
+  {
     "version": "0.65",
     "date": "2026-06-02",
     "changes": [
-      { "type": "NEW FEATURE", "text": "Added Chain Mastery Experience tracking — displays total chained XP per session (XP × 50), with per-minute rate and smart formatting (k/M above 100k)" }
+      { "type": "NEW FEATURE", "text": "Added Chain Mastery Experience tracking per session" }
     ]
   },
   {

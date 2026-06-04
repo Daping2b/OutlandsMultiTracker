@@ -1362,8 +1362,8 @@ class App(ctk.CTk):
                                  font=("Palatino Linotype",12,"bold","italic"),
                                  text_color="#cc2222").pack(side="right",padx=8)
                 changes = entry.get("changes", {})
+                CAT_COLORS = {"NEW FEATURE": "#00dd88", "IMPROVEMENT": GOLD_LT, "BUG FIX": "#cc6644"}
                 if isinstance(changes, dict):
-                    CAT_COLORS = {"NEW FEATURE": "#00dd88", "IMPROVEMENT": GOLD_LT, "BUG FIX": "#cc6644"}
                     for cat, items in changes.items():
                         ctk.CTkLabel(news, text=f"    {cat}",
                                      font=("Segoe UI", 11, "bold"),
@@ -1372,10 +1372,17 @@ class App(ctk.CTk):
                         for item in items:
                             ctk.CTkLabel(news, text=f"      •  {item}", font=("Segoe UI",13),
                                          text_color=TEXT, anchor="w", wraplength=800).pack(fill="x", padx=20, pady=1)
-                else:
+                elif isinstance(changes, list):
                     for ch in changes:
-                        ctk.CTkLabel(news,text=f"    •  {ch}",font=("Segoe UI",13),
-                                     text_color=TEXT,anchor="w",wraplength=800).pack(fill="x",padx=20,pady=2)
+                        if isinstance(ch, dict):
+                            cat  = ch.get("type", "")
+                            text = ch.get("text", "")
+                            color = CAT_COLORS.get(cat, DIM2)
+                            ctk.CTkLabel(news, text=f"      •  {text}", font=("Segoe UI",13),
+                                         text_color=color, anchor="w", wraplength=800).pack(fill="x", padx=20, pady=2)
+                        else:
+                            ctk.CTkLabel(news, text=f"    •  {ch}", font=("Segoe UI",13),
+                                         text_color=TEXT, anchor="w", wraplength=800).pack(fill="x", padx=20, pady=2)
                 ctk.CTkFrame(news,fg_color=BG5,height=1).pack(fill="x",padx=20,pady=6)
         ctk.CTkFrame(news,height=8,fg_color="transparent").pack()
         ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=60,pady=(8,20))
