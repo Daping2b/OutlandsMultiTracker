@@ -1956,25 +1956,21 @@ class App(ctk.CTk):
             ctk.CTkRadioButton(fbar,text=label,variable=self._xp_view,value=val,
                                font=F_SMALL,text_color=TEXT,fg_color=GOLD,hover_color=GOLD_LT,
                                command=self._draw_xp).pack(side="left",padx=6)
-        ctk.CTkLabel(fbar,text="  Character:",text_color=DIM2,font=F_BODY).pack(side="left",padx=(16,4))
-        # Scrollable character bar
-        self._xp_cbar_scroll=ctk.CTkScrollableFrame(fbar,fg_color="transparent",height=40,
-                                                     orientation="horizontal")
-        self._xp_cbar_scroll.pack(side="left",fill="x",expand=True,padx=(0,8))
-        self._xp_cbar=self._xp_cbar_scroll
-        self._xp_chars=set()
-        # Export / Discord buttons (right side)
+        # Export / Discord buttons packed FIRST on right so they're always visible
         dim_btn(fbar,"Copy Discord",self._xp_discord,w=118).pack(side="right",padx=4)
         dim_btn(fbar,"Export CSV",  self._xp_csv,    w=105).pack(side="right",padx=2)
-        # ── Content area — 2 rows ─────────────────────────────────────────────
-        # Row 1: XP chart full width
-        row1=ctk.CTkFrame(page,fg_color=BG); row1.pack(fill="both",expand=True,padx=8,pady=(8,4))
-        self._xp_chart=ctk.CTkFrame(row1,fg_color=BG); self._xp_chart.pack(fill="both",expand=True)
-        # Row 2: centered XP table
-        tbl_wrap=ctk.CTkFrame(page,fg_color="transparent"); tbl_wrap.pack(fill="x",padx=8,pady=(0,8))
-        self._xp_table=ctk.CTkScrollableFrame(tbl_wrap,fg_color=BG2,height=190,
+        ctk.CTkLabel(fbar,text="  Character:",text_color=DIM2,font=F_BODY).pack(side="left",padx=(16,4))
+        # Scrollable character bar — fills remaining space between left labels and right buttons
+        self._xp_cbar=ctk.CTkScrollableFrame(fbar,fg_color="transparent",height=40,orientation="horizontal")
+        self._xp_cbar.pack(side="left",fill="x",expand=True,padx=(0,4))
+        self._xp_chars=set()
+        # ── Chart — fills most of the page ───────────────────────────────────
+        self._xp_chart=ctk.CTkFrame(page,fg_color=BG)
+        self._xp_chart.pack(fill="both",expand=True,padx=8,pady=(8,4))
+        # ── Table — full width below chart ───────────────────────────────────
+        self._xp_table=ctk.CTkScrollableFrame(page,fg_color=BG2,height=220,
                                                border_width=1,border_color=BORDER)
-        self._xp_table.pack(anchor="center")
+        self._xp_table.pack(fill="x",padx=8,pady=(0,8))
         self._refresh_xp()
 
     def _all_time_xp(self):
@@ -2169,12 +2165,7 @@ class App(ctk.CTk):
         self._draw_xp_table(ev, last_xp)
 
 
-    ASPECT_XP_TABLE = [
-        (1,500),(2,1000),(3,1500),(4,2000),(5,2500),
-        (6,3000),(7,3500),(8,4000),(9,4500),(10,5000),
-        (11,15000),(12,25000),(13,40000),(14,120000),(15,250000),
-    ]
-    # Cumulative XP per tier
+    # Cumulative XP per aspect tier (from wiki)
     ASPECT_XP_CUMUL = []
     _c = 0
     for _t,_x in [(1,500),(2,1000),(3,1500),(4,2000),(5,2500),(6,3000),(7,3500),(8,4000),(9,4500),(10,5000),(11,15000),(12,25000),(13,40000),(14,120000),(15,250000)]:

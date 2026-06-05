@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.66.5",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "BUG FIX", "text": "Experience page layout — chart full width, table full width, buttons always visible" },
+      { "type": "IMPROVEMENT", "text": "Experience page — dead code removed, layout cleaned up" }
+    ]
+  },
+  {
     "version": "0.66.4",
     "date": "2026-06-05",
     "changes": [
