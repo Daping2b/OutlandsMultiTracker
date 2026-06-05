@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.66.4",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Experience page — removed left panel, chart is now full width, table centered below" }
+    ]
+  },
+  {
     "version": "0.66.3",
     "date": "2026-06-05",
     "changes": [

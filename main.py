@@ -1967,16 +1967,14 @@ class App(ctk.CTk):
         dim_btn(fbar,"Copy Discord",self._xp_discord,w=118).pack(side="right",padx=4)
         dim_btn(fbar,"Export CSV",  self._xp_csv,    w=105).pack(side="right",padx=2)
         # ── Content area — 2 rows ─────────────────────────────────────────────
-        # Row 1: XP panel (left) + XP chart (right)
+        # Row 1: XP chart full width
         row1=ctk.CTkFrame(page,fg_color=BG); row1.pack(fill="both",expand=True,padx=8,pady=(8,4))
-        self._xp_panel=ctk.CTkFrame(row1,fg_color=BG2,corner_radius=6,border_width=1,border_color=BORDER,width=220)
-        self._xp_panel.pack(side="left",fill="y",padx=(0,6)); self._xp_panel.pack_propagate(False)
-        self._xp_chart=ctk.CTkFrame(row1,fg_color=BG); self._xp_chart.pack(side="left",fill="both",expand=True)
-        # Row 2: full-width XP table
+        self._xp_chart=ctk.CTkFrame(row1,fg_color=BG); self._xp_chart.pack(fill="both",expand=True)
+        # Row 2: centered XP table
         tbl_wrap=ctk.CTkFrame(page,fg_color="transparent"); tbl_wrap.pack(fill="x",padx=8,pady=(0,8))
         self._xp_table=ctk.CTkScrollableFrame(tbl_wrap,fg_color=BG2,height=190,
                                                border_width=1,border_color=BORDER)
-        self._xp_table.pack(fill="x")
+        self._xp_table.pack(anchor="center")
         self._refresh_xp()
 
     def _all_time_xp(self):
@@ -2018,7 +2016,6 @@ class App(ctk.CTk):
         self._refresh_xp()
     def _draw_xp(self,ignore_dates=False):
         for w in self._xp_chart.winfo_children(): w.destroy()
-        for w in self._xp_panel.winfo_children(): w.destroy()
         for w in self._xp_table.winfo_children(): w.destroy()
         ev=list(self.xp_events)
         if not ignore_dates:
@@ -2169,64 +2166,9 @@ class App(ctk.CTk):
         canvas.mpl_connect("motion_notify_event", _on_motion)
         canvas.mpl_connect("figure_leave_event", _on_leave)
         plt.close(fig)
-        self._draw_xp_panel(ev, last_xp)
         self._draw_xp_table(ev, last_xp)
 
-    def _draw_xp_panel(self, ev, last_xp):
-        """Left panel for XP — aspect current/max + est days. Tooltip on hover."""
-        p = self._xp_panel
-        ctk.CTkLabel(p, text="❆  Aspect XP", text_color=GOLD_LT,
-                     font=F_BODY_B, anchor="w").pack(fill="x", padx=10, pady=(8,2))
-        ctk.CTkFrame(p, fg_color=GOLD_DK, height=1).pack(fill="x", padx=8, pady=(0,4))
-        seen = {}
-        for key,(xp_cur,xp_max) in sorted(last_xp.items()):
-            _,asp = key
-            if asp in seen: continue
-            seen[asp] = True
-            asp_ev = sorted([e for e in ev if e["aspect"]==asp], key=lambda x:x["ts"])
-            total_g = 0; prev = {}
-            for e in asp_ev:
-                k2=(e["player"],e["aspect"])
-                if k2 in prev:
-                    pc,pm=prev[k2]
-                    g=(e["xp_cur"]-pc) if e["xp_cur"]>=pc else (pm-pc)+e["xp_cur"]
-                    total_g+=max(0,g)
-                prev[k2]=(e["xp_cur"],e["xp_max"])
-            span_days=max(1.0,(asp_ev[-1]["ts"]-asp_ev[0]["ts"]).total_seconds()/86400) if len(asp_ev)>=2 else 1.0
-            avg_day=total_g/span_days; remaining=max(0,xp_max-xp_cur)
-            est=remaining/avg_day if avg_day>0 else None
-            color=ASPECT_COLORS.get(asp,TEXT)
-            pct = xp_cur/xp_max*100 if xp_max>0 else 0
-            est_txt = f"{est:.0f}d" if est else "—"
-            # Compute current tier and total cumul XP
-            tier = 0; cumul_prev = 0
-            for t, xp_t, xp_c in self.ASPECT_XP_CUMUL:
-                if xp_cur < xp_c:
-                    tier = t; break
-                cumul_prev = xp_c; tier = t
-            total_xp = cumul_prev + xp_cur
-            tip_text = (
-                asp + "\n"
-                + f"Tier:         {tier}\n"
-                + f"Current XP:  {xp_cur:,.1f}\n"
-                + f"Max XP:      {xp_max:,.0f}\n"
-                + f"Total XP:    {total_xp:,.1f}\n"
-                + f"Remaining:   {remaining:,.1f}\n"
-                + f"Avg XP/day:  {avg_day:,.1f}\n"
-                + f"Progress:    {pct:.1f}%\n"
-                + f"Est. Days:   {est_txt}"
-            )
-            row=ctk.CTkFrame(p, fg_color=BG3, corner_radius=3); row.pack(fill="x", padx=6, pady=1)
-            lbl_asp=ctk.CTkLabel(row, text=asp, text_color=color, font=F_SMALL_B, anchor="w", width=90)
-            lbl_asp.pack(side="left", padx=(6,2), pady=2)
-            lbl_pct=ctk.CTkLabel(row, text=f"{pct:.0f}%", text_color=DIM, font=F_SMALL, width=36, anchor="e")
-            lbl_pct.pack(side="left", padx=2)
-            lbl_est=ctk.CTkLabel(row, text=est_txt, text_color=DIM2, font=F_SMALL, width=36, anchor="e")
-            lbl_est.pack(side="right", padx=(2,6))
-            for widget in (row, lbl_asp, lbl_pct, lbl_est):
-                widget.bind("<Enter>", lambda e, t=tip_text: self._row_tip_show(e, t))
-                widget.bind("<Leave>", self._row_tip_hide)
-    # Aspect tier XP table from wiki (XP required per tier, cumulative)
+
     ASPECT_XP_TABLE = [
         (1,500),(2,1000),(3,1500),(4,2000),(5,2500),
         (6,3000),(7,3500),(8,4000),(9,4500),(10,5000),
