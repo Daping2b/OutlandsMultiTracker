@@ -2181,9 +2181,9 @@ class App(ctk.CTk):
         self._draw_chain_panel(ev)
 
     def _draw_xp_panel(self, ev, last_xp):
-        """Left panel for XP — aspect current/max + est days."""
+        """Left panel for XP — aspect current/max + est days. Tooltip on hover."""
         p = self._xp_panel
-        ctk.CTkLabel(p, text="✦  Aspect XP", text_color=GOLD_LT,
+        ctk.CTkLabel(p, text="❆  Aspect XP", text_color=GOLD_LT,
                      font=F_BODY_B, anchor="w").pack(fill="x", padx=10, pady=(8,2))
         ctk.CTkFrame(p, fg_color=GOLD_DK, height=1).pack(fill="x", padx=8, pady=(0,4))
         seen = {}
@@ -2204,16 +2204,27 @@ class App(ctk.CTk):
             avg_day=total_g/span_days; remaining=max(0,xp_max-xp_cur)
             est=remaining/avg_day if avg_day>0 else None
             color=ASPECT_COLORS.get(asp,TEXT)
-            row=ctk.CTkFrame(p, fg_color=BG3, corner_radius=3); row.pack(fill="x", padx=6, pady=1)
-            ctk.CTkLabel(row, text=asp, text_color=color, font=F_SMALL_B,
-                         anchor="w", width=90).pack(side="left", padx=(6,2), pady=2)
             pct = xp_cur/xp_max*100 if xp_max>0 else 0
-            ctk.CTkLabel(row, text=f"{pct:.0f}%", text_color=DIM, font=F_SMALL,
-                         width=36, anchor="e").pack(side="left", padx=2)
             est_txt = f"{est:.0f}d" if est else "—"
-            ctk.CTkLabel(row, text=est_txt, text_color=DIM2, font=F_SMALL,
-                         width=36, anchor="e").pack(side="right", padx=(2,6))
-
+            tip_text = (
+                asp + "\n"
+                + f"Current XP:  {xp_cur:,.1f}\n"
+                + f"Max XP:      {xp_max:,.0f}\n"
+                + f"Remaining:   {remaining:,.1f}\n"
+                + f"Avg XP/day:  {avg_day:,.1f}\n"
+                + f"Progress:    {pct:.1f}%\n"
+                + f"Est. Days:   {est_txt}"
+            )
+            row=ctk.CTkFrame(p, fg_color=BG3, corner_radius=3); row.pack(fill="x", padx=6, pady=1)
+            lbl_asp=ctk.CTkLabel(row, text=asp, text_color=color, font=F_SMALL_B, anchor="w", width=90)
+            lbl_asp.pack(side="left", padx=(6,2), pady=2)
+            lbl_pct=ctk.CTkLabel(row, text=f"{pct:.0f}%", text_color=DIM, font=F_SMALL, width=36, anchor="e")
+            lbl_pct.pack(side="left", padx=2)
+            lbl_est=ctk.CTkLabel(row, text=est_txt, text_color=DIM2, font=F_SMALL, width=36, anchor="e")
+            lbl_est.pack(side="right", padx=(2,6))
+            for widget in (row, lbl_asp, lbl_pct, lbl_est):
+                widget.bind("<Enter>", lambda e, t=tip_text: self._row_tip_show(e, t))
+                widget.bind("<Leave>", self._row_tip_hide)
     CHAIN_XP_TABLE = [
         (1,250000,250000),(2,500000,750000),(3,750000,1500000),(4,1000000,2500000),
         (5,1250000,3750000),(6,1500000,5250000),(7,1750000,7000000),(8,2000000,9000000),

@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.66.1",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Aspect XP panel — full stats on hover tooltip (Current XP, Max, Remaining, Avg/day, Est. Days)" }
+    ]
+  },
+  {
     "version": "0.66",
     "date": "2026-06-05",
     "changes": [
