@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.66",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Chain Mastery XP tracking — chart and panel with link progress, est. days to next link" },
+      { "type": "NEW FEATURE", "text": "Experience page — All button to toggle all characters at once" },
+      { "type": "NEW FEATURE", "text": "Experience page — scrollable character bar for large rosters" },
+      { "type": "IMPROVEMENT", "text": "Patch Notes — Daping signature on each version panel" },
+      { "type": "BUG FIX", "text": "Character selection state not reflecting reality — fixed" }
+    ]
+  },
+  {
+    "version": "0.65.5",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "BUG FIX", "text": "Sessions empty — Chain column crash fixed" }
+    ]
+  },
+  {
     "version": "0.65.4",
     "date": "2026-06-05",
     "changes": [

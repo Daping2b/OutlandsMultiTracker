@@ -1414,7 +1414,12 @@ class App(ctk.CTk):
                     for item in items:
                         ctk.CTkLabel(panel, text=f"      •  {item}", font=("Segoe UI",13),
                                      text_color=TEXT, anchor="w", wraplength=820).pack(fill="x", padx=12, pady=1)
-                ctk.CTkFrame(panel, height=6, fg_color="transparent").pack()
+                # Signature bottom-right
+                sig_row = ctk.CTkFrame(panel, fg_color="transparent")
+                sig_row.pack(fill="x", padx=12, pady=(2,6))
+                ctk.CTkLabel(sig_row, text="— Daping",
+                             font=("Palatino Linotype",12,"bold","italic"),
+                             text_color="#cc2222").pack(side="right")
 
         ctk.CTkFrame(news,height=8,fg_color="transparent").pack()
         ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=60,pady=(8,20))
@@ -1738,7 +1743,7 @@ class App(ctk.CTk):
             (None,                                 self.COLS[8][3], False),  # bonus
             (f"{harv:,}\n({rate(harv,mins)})",    self.COLS[9][3], False),
             (f"{exp:,.0f}\n({rate(exp,mins)})",   self.COLS[10][3], False),
-            (f"{fmt_chain(chain)}\n({fmt_chain(rate(chain,mins))}/min)", self.COLS[11][3], False),
+            (f"{fmt_chain(chain)}\n({fmt_chain(chain/max(1,mins))}/min)", self.COLS[11][3], False),
         ]
         for i,(text,cw,wrap) in enumerate(vals):
             if i == 7:
@@ -1948,6 +1953,7 @@ class App(ctk.CTk):
     def _build_xp(self):
         page=ctk.CTkFrame(self._body,fg_color=BG,corner_radius=0)
         self._pages["Experience"]=page
+        # ── Filter bar ───────────────────────────────────────────────────────
         fbar=ctk.CTkFrame(page,fg_color=BG2,height=54,corner_radius=0); fbar.pack(fill="x"); fbar.pack_propagate(False)
         ctk.CTkFrame(fbar,fg_color=GOLD_DK,height=1,corner_radius=0).place(relx=0,rely=1.0,relwidth=1.0,anchor="sw")
         self._xget_from,self._xget_to=date_row(fbar,self._refresh_xp,self._all_time_xp)
@@ -1958,17 +1964,26 @@ class App(ctk.CTk):
                                font=F_SMALL,text_color=TEXT,fg_color=GOLD,hover_color=GOLD_LT,
                                command=self._draw_xp).pack(side="left",padx=6)
         ctk.CTkLabel(fbar,text="  Character:",text_color=DIM2,font=F_BODY).pack(side="left",padx=(16,4))
-        self._xp_cbar=ctk.CTkFrame(fbar,fg_color="transparent"); self._xp_cbar.pack(side="left")
+        # Scrollable character bar
+        self._xp_cbar_scroll=ctk.CTkScrollableFrame(fbar,fg_color="transparent",height=40,
+                                                     orientation="horizontal")
+        self._xp_cbar_scroll.pack(side="left",fill="x",expand=True,padx=(0,8))
+        self._xp_cbar=self._xp_cbar_scroll
         self._xp_chars=set()
-        self._xp_chart=ctk.CTkFrame(page,fg_color=BG); self._xp_chart.pack(fill="both",expand=True,padx=8,pady=8)
-        tbl_wrap=ctk.CTkFrame(page,fg_color="transparent"); tbl_wrap.pack(fill="x",pady=(0,8))
-        self._xp_table=ctk.CTkScrollableFrame(tbl_wrap,fg_color=BG2,height=190,
-                                               border_width=1,border_color=BORDER,width=940)
-        self._xp_table.pack(anchor="center")
+        # ── Content area — 2 rows ─────────────────────────────────────────────
+        # Row 1: XP panel (left) + XP chart (right)
+        row1=ctk.CTkFrame(page,fg_color=BG); row1.pack(fill="both",expand=True,padx=8,pady=(8,4))
+        self._xp_panel=ctk.CTkFrame(row1,fg_color=BG2,corner_radius=6,border_width=1,border_color=BORDER,width=220)
+        self._xp_panel.pack(side="left",fill="y",padx=(0,6)); self._xp_panel.pack_propagate(False)
+        self._xp_chart=ctk.CTkFrame(row1,fg_color=BG); self._xp_chart.pack(side="left",fill="both",expand=True)
+        # Row 2: Chain chart (left) + Chain panel (right)
+        row2=ctk.CTkFrame(page,fg_color=BG); row2.pack(fill="both",expand=True,padx=8,pady=(4,8))
+        self._chain_chart=ctk.CTkFrame(row2,fg_color=BG); self._chain_chart.pack(side="left",fill="both",expand=True)
+        self._chain_panel=ctk.CTkFrame(row2,fg_color=BG2,corner_radius=6,border_width=1,border_color=BORDER,width=220)
+        self._chain_panel.pack(side="left",fill="y",padx=(6,0)); self._chain_panel.pack_propagate(False)
         self._refresh_xp()
 
     def _all_time_xp(self):
-        # Select all characters before drawing
         players=sorted(set(e["player"] for e in self.xp_events if e.get("player")))
         self._xp_chars=set(players)
         self._draw_xp(ignore_dates=True)
@@ -1976,7 +1991,14 @@ class App(ctk.CTk):
     def _refresh_xp(self):
         for w in self._xp_cbar.winfo_children(): w.destroy()
         players=sorted(set(e["player"] for e in self.xp_events if e.get("player")))
-        if not self._xp_chars: self._xp_chars=set(players)
+        # All button
+        all_sel = (self._xp_chars == set(players)) if players else False
+        ctk.CTkButton(self._xp_cbar,text="All",width=60,height=30,
+                      fg_color=GOLD if all_sel else BG4,
+                      text_color="#050505" if all_sel else DIM2,
+                      hover_color=GOLD_LT,corner_radius=4,font=F_BODY,
+                      border_width=1,border_color=BORDER,
+                      command=self._tog_xp_all).pack(side="left",padx=(0,6))
         for p in players:
             sel=p in self._xp_chars
             ctk.CTkButton(self._xp_cbar,text=p,width=95,height=30,
@@ -1986,11 +2008,25 @@ class App(ctk.CTk):
                           command=lambda n=p:self._tog_xp(n)).pack(side="left",padx=2)
         self._draw_xp()
 
-    def _tog_xp(self,n): self._xp_chars^={n}; self._refresh_xp()
+    def _tog_xp_all(self):
+        players=sorted(set(e["player"] for e in self.xp_events if e.get("player")))
+        if self._xp_chars == set(players):
+            self._xp_chars=set()
+        else:
+            self._xp_chars=set(players)
+        self._refresh_xp()
 
+    def _tog_xp(self,n):
+        if n in self._xp_chars: self._xp_chars.discard(n)
+        else: self._xp_chars.add(n)
+        self._refresh_xp()
     def _draw_xp(self,ignore_dates=False):
         for w in self._xp_chart.winfo_children(): w.destroy()
-        for w in self._xp_table.winfo_children(): w.destroy()
+        for w in self._xp_panel.winfo_children(): w.destroy()
+        for w in self._chain_chart.winfo_children(): w.destroy()
+        for w in self._chain_panel.winfo_children(): w.destroy()
+        if hasattr(self,'_xp_table'):
+            for w in self._xp_table.winfo_children(): w.destroy()
         ev=list(self.xp_events)
         if not ignore_dates:
             try:
@@ -2140,23 +2176,23 @@ class App(ctk.CTk):
         canvas.mpl_connect("motion_notify_event", _on_motion)
         canvas.mpl_connect("figure_leave_event", _on_leave)
         plt.close(fig)
-        self._draw_xp_table(ev, last_xp)
+        self._draw_xp_panel(ev, last_xp)
+        self._draw_chain_chart(ev, ignore_dates)
+        self._draw_chain_panel(ev)
 
-    def _draw_xp_table(self,ev,last_xp):
-        ctk.CTkLabel(self._xp_table,text="  ✦  Estimated Days to Next Level",
-                     text_color=GOLD,font=F_TITLE).pack(anchor="w",padx=8,pady=(8,4))
-        ctk.CTkFrame(self._xp_table,fg_color=GOLD_DK,height=1).pack(fill="x",padx=8,pady=(0,6))
-        hdr=ctk.CTkFrame(self._xp_table,fg_color=BG3); hdr.pack(fill="x",padx=4,pady=(0,4))
-        for col,w in [("Aspect",125),("Current XP",115),("Max XP",115),
-                      ("Remaining",120),("Avg XP/day",115),("Est. Days",100)]:
-            ctk.CTkLabel(hdr,text=col,width=w,text_color=GOLD,font=F_BODY_B).pack(side="left",padx=4,pady=4)
-        seen={}
+    def _draw_xp_panel(self, ev, last_xp):
+        """Left panel for XP — aspect current/max + est days."""
+        p = self._xp_panel
+        ctk.CTkLabel(p, text="✦  Aspect XP", text_color=GOLD_LT,
+                     font=F_BODY_B, anchor="w").pack(fill="x", padx=10, pady=(8,2))
+        ctk.CTkFrame(p, fg_color=GOLD_DK, height=1).pack(fill="x", padx=8, pady=(0,4))
+        seen = {}
         for key,(xp_cur,xp_max) in sorted(last_xp.items()):
-            _,asp=key
+            _,asp = key
             if asp in seen: continue
-            seen[asp]=True
-            asp_ev=sorted([e for e in ev if e["aspect"]==asp],key=lambda x:x["ts"])
-            total_g=0; prev={}
+            seen[asp] = True
+            asp_ev = sorted([e for e in ev if e["aspect"]==asp], key=lambda x:x["ts"])
+            total_g = 0; prev = {}
             for e in asp_ev:
                 k2=(e["player"],e["aspect"])
                 if k2 in prev:
@@ -2168,13 +2204,142 @@ class App(ctk.CTk):
             avg_day=total_g/span_days; remaining=max(0,xp_max-xp_cur)
             est=remaining/avg_day if avg_day>0 else None
             color=ASPECT_COLORS.get(asp,TEXT)
-            row=ctk.CTkFrame(self._xp_table,fg_color=BG2,corner_radius=4); row.pack(fill="x",padx=4,pady=1)
-            for text,w in [(asp,125),(f"{xp_cur:,.1f}",115),(f"{xp_max:,.0f}",115),
-                           (f"{remaining:,.1f}",120),(f"{avg_day:,.1f}",115),
-                           (f"{est:.1f} days" if est else "—",100)]:
-                ctk.CTkLabel(row,text=text,width=w,
-                             text_color=color if text==asp else TEXT,
-                             font=F_BODY_B if text==asp else F_BODY).pack(side="left",padx=4,pady=3)
+            row=ctk.CTkFrame(p, fg_color=BG3, corner_radius=3); row.pack(fill="x", padx=6, pady=1)
+            ctk.CTkLabel(row, text=asp, text_color=color, font=F_SMALL_B,
+                         anchor="w", width=90).pack(side="left", padx=(6,2), pady=2)
+            pct = xp_cur/xp_max*100 if xp_max>0 else 0
+            ctk.CTkLabel(row, text=f"{pct:.0f}%", text_color=DIM, font=F_SMALL,
+                         width=36, anchor="e").pack(side="left", padx=2)
+            est_txt = f"{est:.0f}d" if est else "—"
+            ctk.CTkLabel(row, text=est_txt, text_color=DIM2, font=F_SMALL,
+                         width=36, anchor="e").pack(side="right", padx=(2,6))
+
+    CHAIN_XP_TABLE = [
+        (1,250000,250000),(2,500000,750000),(3,750000,1500000),(4,1000000,2500000),
+        (5,1250000,3750000),(6,1500000,5250000),(7,1750000,7000000),(8,2000000,9000000),
+        (9,2250000,11250000),(10,2500000,13750000),(11,2750000,16500000),(12,3000000,19500000),
+        (13,3250000,22750000),(14,3500000,26250000),(15,3750000,30000000),(16,4000000,34000000),
+        (17,4250000,38250000),(18,4500000,42750000),(19,4750000,47500000),(20,5000000,52500000),
+        (21,5250000,57750000),(22,5500000,63250000),(23,5750000,69000000),(24,6000000,75000000),
+        (25,6250000,81250000),(26,6500000,87750000),(27,6750000,94500000),(28,7000000,101500000),
+        (29,7250000,108750000),(30,7500000,116250000),
+    ]
+
+    def _chain_xp_from_events(self, ev):
+        """Compute total chain XP gained per bucket from xp_events (XP * 50)."""
+        total = 0.0
+        last = {}
+        for e in sorted(ev, key=lambda x: x["ts"]):
+            key = (e["player"], e["aspect"])
+            if key in last:
+                pc, pm = last[key]
+                gained = (e["xp_cur"]-pc) if e["xp_cur"]>=pc else (pm-pc)+e["xp_cur"]
+                total += max(0, gained) * 50
+            last[key] = (e["xp_cur"], e["xp_max"])
+        return total, last
+
+    def _chain_link_for_xp(self, total_chain_xp):
+        """Return (current_link, xp_in_link, xp_for_next, next_link_total) from cumulative XP."""
+        cumul = 0
+        for link, xp_needed, xp_cumul in self.CHAIN_XP_TABLE:
+            if total_chain_xp < xp_cumul:
+                xp_in = total_chain_xp - cumul
+                return link, xp_in, xp_needed, xp_cumul
+            cumul = xp_cumul
+        return 30, 0, 0, self.CHAIN_XP_TABLE[-1][2]
+
+    def _draw_chain_chart(self, ev, ignore_dates=False):
+        """Draw Chain Mastery XP bar chart (XP * 50 per bucket)."""
+        for w in self._chain_chart.winfo_children(): w.destroy()
+        if not ev:
+            ctk.CTkLabel(self._chain_chart, text="No Chain XP data.",
+                         text_color=DIM, font=F_HEAD).pack(expand=True)
+            return
+        view = self._xp_view.get()
+        def bk(ts):
+            if view=="month": return ts.strftime("%b %Y")
+            if view=="day":   return ts.strftime("%Y-%m-%d")
+            return ts.strftime("%Y-%m-%d %Hh")
+        def sk(k):
+            if view=="month": return datetime.strptime(k,"%b %Y")
+            if view=="day":   return datetime.strptime(k,"%Y-%m-%d")
+            return datetime.strptime(k,"%Y-%m-%d %Hh")
+        bucket_chain = {}; last = {}
+        for e in sorted(ev, key=lambda x: x["ts"]):
+            key=(e["player"],e["aspect"]); b=bk(e["ts"])
+            bucket_chain.setdefault(b, 0)
+            if key in last:
+                pc,pm=last[key]
+                gained=(e["xp_cur"]-pc) if e["xp_cur"]>=pc else (pm-pc)+e["xp_cur"]
+                bucket_chain[b]+=max(0,gained)*50
+            last[key]=(e["xp_cur"],e["xp_max"])
+        buckets=sorted(bucket_chain,key=sk)
+        if len(buckets)>60: buckets=buckets[-60:]
+        n=len(buckets)
+        fig_w=max(8, n*0.85); fig_h=4.0
+        fig,ax=plt.subplots(figsize=(fig_w,fig_h),dpi=96)
+        fig.patch.set_facecolor(BG); ax.set_facecolor(BG2)
+        for sp in ax.spines.values(): sp.set_edgecolor(BG3)
+        ax.tick_params(colors=TEXT,labelsize=8,length=3)
+        ax.set_axisbelow(True)
+        ax.yaxis.grid(True,linestyle=":",linewidth=0.6,color="#333333",alpha=0.8)
+        ax.xaxis.grid(False)
+        x=np.arange(n)
+        vals=np.array([bucket_chain[b] for b in buckets])
+        bars=ax.bar(x,vals,color="#c8882a",width=0.78,edgecolor="none")
+        for bar,val in zip(bars,vals):
+            if val>0 and bar.get_height()>10000:
+                ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()/2,
+                        fmt_chain(val), ha="center", va="center",
+                        fontsize=7, color="#000000", fontweight="bold", clip_on=True)
+        lbl_map={"month":"Monthly","day":"Daily","hour":"Hourly"}
+        title=", ".join(sorted(self._xp_chars)) or "All"
+        ax.set_title(f"Chain Mastery XP — {lbl_map[view]} — {title}",
+                     color=GOLD_LT,fontsize=11,pad=8,fontweight="bold")
+        ax.set_xticks(x)
+        ax.set_xticklabels(buckets,rotation=45,ha="right",color=TEXT,fontsize=8)
+        ax.set_ylabel("Chain XP Gained",color=DIM,fontsize=9,labelpad=6)
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v,p: fmt_chain(v)))
+        plt.tight_layout(pad=0.5)
+        canvas=FigureCanvasTkAgg(fig,master=self._chain_chart)
+        canvas.get_tk_widget().pack(fill="both",expand=True)
+        plt.close(fig)
+
+    def _draw_chain_panel(self, ev):
+        """Right panel for Chain Mastery XP — link progress + est days."""
+        p = self._chain_panel
+        ctk.CTkLabel(p, text="✦  Chain Mastery", text_color=GOLD_LT,
+                     font=F_BODY_B, anchor="w").pack(fill="x", padx=10, pady=(8,2))
+        ctk.CTkFrame(p, fg_color=GOLD_DK, height=1).pack(fill="x", padx=8, pady=(0,6))
+        if not ev:
+            ctk.CTkLabel(p, text="No data", text_color=DIM2, font=F_SMALL).pack(padx=8, pady=4)
+            return
+        total_chain, last = self._chain_xp_from_events(ev)
+        link, xp_in, xp_needed, xp_cumul = self._chain_link_for_xp(total_chain)
+        pct = (xp_in/xp_needed*100) if xp_needed>0 else 100
+        # Avg chain XP / day
+        ev_sorted = sorted(ev, key=lambda x: x["ts"])
+        span = max(1.0,(ev_sorted[-1]["ts"]-ev_sorted[0]["ts"]).total_seconds()/86400) if len(ev_sorted)>=2 else 1.0
+        avg_day = total_chain / span
+        remaining = max(0, xp_needed - xp_in)
+        est = remaining/avg_day if avg_day>0 else None
+        def stat_row(label, value, color=TEXT):
+            r=ctk.CTkFrame(p, fg_color=BG3, corner_radius=3); r.pack(fill="x", padx=6, pady=2)
+            ctk.CTkLabel(r, text=label, text_color=DIM, font=F_SMALL,
+                         anchor="w", width=100).pack(side="left", padx=(6,2), pady=3)
+            ctk.CTkLabel(r, text=value, text_color=color, font=F_SMALL_B,
+                         anchor="e").pack(side="right", padx=(2,6), pady=3)
+        stat_row("Current Link", f"Link {link}", GOLD)
+        stat_row("Total Chain XP", fmt_chain(total_chain), GOLD_LT)
+        stat_row("XP in Link", fmt_chain(xp_in))
+        stat_row("XP for Next", fmt_chain(xp_needed))
+        stat_row("Progress", f"{pct:.1f}%")
+        stat_row("Avg/day", fmt_chain(avg_day))
+        stat_row("Est. Days", f"{est:.1f}d" if est else "—")
+        if link < 30:
+            ctk.CTkProgressBar(p, progress_color=GOLD, fg_color=BG4,
+                                height=8, corner_radius=4).pack(fill="x", padx=10, pady=(4,2))
+            prog = p.winfo_children()[-1]; prog.set(pct/100)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # GUILD
