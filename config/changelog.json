@@ -1,5 +1,22 @@
 [
   {
+    "version": "0.66.3",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Removed Chain Mastery XP system — could not be integrated correctly" },
+      { "type": "IMPROVEMENT", "text": "Experience page — XP table restored below chart with Tier column" }
+    ]
+  },
+  {
+    "version": "0.66.2",
+    "date": "2026-06-05",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Aspect XP tooltip — shows Tier, Total XP, Current, Remaining, Avg/day, Est. Days" },
+      { "type": "NEW FEATURE", "text": "Experience page — Export CSV and Copy Discord for selected characters" },
+      { "type": "NEW FEATURE", "text": "Chain Mastery panel — full number tooltips on each stat row" }
+    ]
+  },
+  {
     "version": "0.66.1",
     "date": "2026-06-05",
     "changes": [

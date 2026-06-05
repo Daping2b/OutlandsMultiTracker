@@ -396,11 +396,7 @@ def s_rare(s):    return sum(q for c,it in s.get("loots",{}).items() if c in RAR
 def s_junk(s):    return sum(q for c,it in s.get("loots",{}).items() if c in JUNK_CATS    for q in it.values())
 def s_harvest(s): return sum(q for c,it in s.get("loots",{}).items() if c in HARVEST_CATS for q in it.values())
 def s_exp(s):     return sum(s.get("aspects_gained",{}).values())
-def s_chain(s):   return s_exp(s) * 50
-def fmt_chain(v):
-    if v >= 1_000_000: return f"{v/1_000_000:.1f}M"
-    if v >= 100_000:   return f"{v/1_000:.0f}k"
-    return f"{v:,.0f}"
+
 def rate(total,mins):
     r=total/max(1,mins); return f"{r/1000:.1f}k/min" if r>=1000 else f"{r:.1f}/min"
 def fmt_dur(mins):
@@ -1655,7 +1651,6 @@ class App(ctk.CTk):
         ("bonus",    "Bonus",      "bonus_experience.png",             90),
         ("harvest",  "Harvest",    "hatchetiron1.png",                 85),
         ("exp",      "Exp",        "chromaticcore1.png",              100),
-        ("chain",    "Chain",      "chainbonus.png",                   90),
     ]
 
     def _draw_header(self):
@@ -1693,7 +1688,6 @@ class App(ctk.CTk):
 
     def _draw_row(self,idx,s):
         mins=dur_min(s); gold,doub,rare,junk,harv,exp=s_gold(s),s_doub(s),s_rare(s),s_junk(s),s_harvest(s),s_exp(s)
-        chain=s_chain(s)
         stype=type_display(s); dt=session_date(s); bg=ROW_A if idx%2==0 else ROW_B
         outer=ctk.CTkFrame(self._inner,fg_color=BG,corner_radius=0); outer.pack(fill="x",pady=1)
         row=ctk.CTkFrame(outer,fg_color=bg,corner_radius=3); row.pack(fill="x")
@@ -1743,7 +1737,6 @@ class App(ctk.CTk):
             (None,                                 self.COLS[8][3], False),  # bonus
             (f"{harv:,}\n({rate(harv,mins)})",    self.COLS[9][3], False),
             (f"{exp:,.0f}\n({rate(exp,mins)})",   self.COLS[10][3], False),
-            (f"{fmt_chain(chain)}\n({fmt_chain(chain/max(1,mins))}/min)", self.COLS[11][3], False),
         ]
         for i,(text,cw,wrap) in enumerate(vals):
             if i == 7:
@@ -1970,17 +1963,20 @@ class App(ctk.CTk):
         self._xp_cbar_scroll.pack(side="left",fill="x",expand=True,padx=(0,8))
         self._xp_cbar=self._xp_cbar_scroll
         self._xp_chars=set()
+        # Export / Discord buttons (right side)
+        dim_btn(fbar,"Copy Discord",self._xp_discord,w=118).pack(side="right",padx=4)
+        dim_btn(fbar,"Export CSV",  self._xp_csv,    w=105).pack(side="right",padx=2)
         # ── Content area — 2 rows ─────────────────────────────────────────────
         # Row 1: XP panel (left) + XP chart (right)
         row1=ctk.CTkFrame(page,fg_color=BG); row1.pack(fill="both",expand=True,padx=8,pady=(8,4))
         self._xp_panel=ctk.CTkFrame(row1,fg_color=BG2,corner_radius=6,border_width=1,border_color=BORDER,width=220)
         self._xp_panel.pack(side="left",fill="y",padx=(0,6)); self._xp_panel.pack_propagate(False)
         self._xp_chart=ctk.CTkFrame(row1,fg_color=BG); self._xp_chart.pack(side="left",fill="both",expand=True)
-        # Row 2: Chain chart (left) + Chain panel (right)
-        row2=ctk.CTkFrame(page,fg_color=BG); row2.pack(fill="both",expand=True,padx=8,pady=(4,8))
-        self._chain_chart=ctk.CTkFrame(row2,fg_color=BG); self._chain_chart.pack(side="left",fill="both",expand=True)
-        self._chain_panel=ctk.CTkFrame(row2,fg_color=BG2,corner_radius=6,border_width=1,border_color=BORDER,width=220)
-        self._chain_panel.pack(side="left",fill="y",padx=(6,0)); self._chain_panel.pack_propagate(False)
+        # Row 2: full-width XP table
+        tbl_wrap=ctk.CTkFrame(page,fg_color="transparent"); tbl_wrap.pack(fill="x",padx=8,pady=(0,8))
+        self._xp_table=ctk.CTkScrollableFrame(tbl_wrap,fg_color=BG2,height=190,
+                                               border_width=1,border_color=BORDER)
+        self._xp_table.pack(fill="x")
         self._refresh_xp()
 
     def _all_time_xp(self):
@@ -2023,10 +2019,7 @@ class App(ctk.CTk):
     def _draw_xp(self,ignore_dates=False):
         for w in self._xp_chart.winfo_children(): w.destroy()
         for w in self._xp_panel.winfo_children(): w.destroy()
-        for w in self._chain_chart.winfo_children(): w.destroy()
-        for w in self._chain_panel.winfo_children(): w.destroy()
-        if hasattr(self,'_xp_table'):
-            for w in self._xp_table.winfo_children(): w.destroy()
+        for w in self._xp_table.winfo_children(): w.destroy()
         ev=list(self.xp_events)
         if not ignore_dates:
             try:
@@ -2177,8 +2170,7 @@ class App(ctk.CTk):
         canvas.mpl_connect("figure_leave_event", _on_leave)
         plt.close(fig)
         self._draw_xp_panel(ev, last_xp)
-        self._draw_chain_chart(ev, ignore_dates)
-        self._draw_chain_panel(ev)
+        self._draw_xp_table(ev, last_xp)
 
     def _draw_xp_panel(self, ev, last_xp):
         """Left panel for XP — aspect current/max + est days. Tooltip on hover."""
@@ -2206,10 +2198,19 @@ class App(ctk.CTk):
             color=ASPECT_COLORS.get(asp,TEXT)
             pct = xp_cur/xp_max*100 if xp_max>0 else 0
             est_txt = f"{est:.0f}d" if est else "—"
+            # Compute current tier and total cumul XP
+            tier = 0; cumul_prev = 0
+            for t, xp_t, xp_c in self.ASPECT_XP_CUMUL:
+                if xp_cur < xp_c:
+                    tier = t; break
+                cumul_prev = xp_c; tier = t
+            total_xp = cumul_prev + xp_cur
             tip_text = (
                 asp + "\n"
+                + f"Tier:         {tier}\n"
                 + f"Current XP:  {xp_cur:,.1f}\n"
                 + f"Max XP:      {xp_max:,.0f}\n"
+                + f"Total XP:    {total_xp:,.1f}\n"
                 + f"Remaining:   {remaining:,.1f}\n"
                 + f"Avg XP/day:  {avg_day:,.1f}\n"
                 + f"Progress:    {pct:.1f}%\n"
@@ -2225,132 +2226,149 @@ class App(ctk.CTk):
             for widget in (row, lbl_asp, lbl_pct, lbl_est):
                 widget.bind("<Enter>", lambda e, t=tip_text: self._row_tip_show(e, t))
                 widget.bind("<Leave>", self._row_tip_hide)
-    CHAIN_XP_TABLE = [
-        (1,250000,250000),(2,500000,750000),(3,750000,1500000),(4,1000000,2500000),
-        (5,1250000,3750000),(6,1500000,5250000),(7,1750000,7000000),(8,2000000,9000000),
-        (9,2250000,11250000),(10,2500000,13750000),(11,2750000,16500000),(12,3000000,19500000),
-        (13,3250000,22750000),(14,3500000,26250000),(15,3750000,30000000),(16,4000000,34000000),
-        (17,4250000,38250000),(18,4500000,42750000),(19,4750000,47500000),(20,5000000,52500000),
-        (21,5250000,57750000),(22,5500000,63250000),(23,5750000,69000000),(24,6000000,75000000),
-        (25,6250000,81250000),(26,6500000,87750000),(27,6750000,94500000),(28,7000000,101500000),
-        (29,7250000,108750000),(30,7500000,116250000),
+    # Aspect tier XP table from wiki (XP required per tier, cumulative)
+    ASPECT_XP_TABLE = [
+        (1,500),(2,1000),(3,1500),(4,2000),(5,2500),
+        (6,3000),(7,3500),(8,4000),(9,4500),(10,5000),
+        (11,15000),(12,25000),(13,40000),(14,120000),(15,250000),
     ]
+    # Cumulative XP per tier
+    ASPECT_XP_CUMUL = []
+    _c = 0
+    for _t,_x in [(1,500),(2,1000),(3,1500),(4,2000),(5,2500),(6,3000),(7,3500),(8,4000),(9,4500),(10,5000),(11,15000),(12,25000),(13,40000),(14,120000),(15,250000)]:
+        _c += _x
+        ASPECT_XP_CUMUL.append((_t, _x, _c))
 
-    def _chain_xp_from_events(self, ev):
-        """Compute total chain XP gained per bucket from xp_events (XP * 50)."""
-        total = 0.0
-        last = {}
-        for e in sorted(ev, key=lambda x: x["ts"]):
-            key = (e["player"], e["aspect"])
-            if key in last:
-                pc, pm = last[key]
-                gained = (e["xp_cur"]-pc) if e["xp_cur"]>=pc else (pm-pc)+e["xp_cur"]
-                total += max(0, gained) * 50
-            last[key] = (e["xp_cur"], e["xp_max"])
-        return total, last
 
-    def _chain_link_for_xp(self, total_chain_xp):
-        """Return (current_link, xp_in_link, xp_for_next, next_link_total) from cumulative XP."""
-        cumul = 0
-        for link, xp_needed, xp_cumul in self.CHAIN_XP_TABLE:
-            if total_chain_xp < xp_cumul:
-                xp_in = total_chain_xp - cumul
-                return link, xp_in, xp_needed, xp_cumul
-            cumul = xp_cumul
-        return 30, 0, 0, self.CHAIN_XP_TABLE[-1][2]
+    def _draw_xp_table(self, ev, last_xp):
+        ctk.CTkLabel(self._xp_table, text="  ✦  Estimated Days to Next Level",
+                     text_color=GOLD, font=F_TITLE).pack(anchor="w", padx=8, pady=(8,4))
+        ctk.CTkFrame(self._xp_table, fg_color=GOLD_DK, height=1).pack(fill="x", padx=8, pady=(0,6))
+        hdr=ctk.CTkFrame(self._xp_table, fg_color=BG3); hdr.pack(fill="x", padx=4, pady=(0,4))
+        for col,w in [("Aspect",125),("Tier",50),("Current XP",115),("Max XP",115),
+                      ("Remaining",115),("Avg XP/day",115),("Est. Days",100)]:
+            ctk.CTkLabel(hdr, text=col, width=w, text_color=GOLD, font=F_BODY_B).pack(side="left", padx=4, pady=4)
+        seen={}
+        for key,(xp_cur,xp_max) in sorted(last_xp.items()):
+            _,asp=key
+            if asp in seen: continue
+            seen[asp]=True
+            asp_ev=sorted([e for e in ev if e["aspect"]==asp], key=lambda x:x["ts"])
+            total_g=0; prev={}
+            for e in asp_ev:
+                k2=(e["player"],e["aspect"])
+                if k2 in prev:
+                    pc,pm=prev[k2]
+                    g=(e["xp_cur"]-pc) if e["xp_cur"]>=pc else (pm-pc)+e["xp_cur"]
+                    total_g+=max(0,g)
+                prev[k2]=(e["xp_cur"],e["xp_max"])
+            span_days=max(1.0,(asp_ev[-1]["ts"]-asp_ev[0]["ts"]).total_seconds()/86400) if len(asp_ev)>=2 else 1.0
+            avg_day=total_g/span_days; remaining=max(0,xp_max-xp_cur)
+            est=remaining/avg_day if avg_day>0 else None
+            tier=0; cumul_prev=0
+            for t,xt,xc in self.ASPECT_XP_CUMUL:
+                if xp_cur<xc: tier=t; break
+                cumul_prev=xc; tier=t
+            color=ASPECT_COLORS.get(asp,TEXT)
+            row=ctk.CTkFrame(self._xp_table, fg_color=BG2, corner_radius=4); row.pack(fill="x", padx=4, pady=1)
+            for text,w in [(asp,125),(str(tier),50),(f"{xp_cur:,.1f}",115),(f"{xp_max:,.0f}",115),
+                           (f"{remaining:,.1f}",115),(f"{avg_day:,.1f}",115),
+                           (f"{est:.1f} days" if est else "—",100)]:
+                ctk.CTkLabel(row, text=text, width=w,
+                             text_color=color if text==asp else TEXT,
+                             font=F_BODY_B if text==asp else F_BODY).pack(side="left", padx=4, pady=3)
 
-    def _draw_chain_chart(self, ev, ignore_dates=False):
-        """Draw Chain Mastery XP bar chart (XP * 50 per bucket)."""
-        for w in self._chain_chart.winfo_children(): w.destroy()
+    def _xp_csv(self):
+        """Export XP data for selected characters to CSV."""
+        import csv as _csv
+        ev = [e for e in self.xp_events if e.get("player","") in self._xp_chars] if self._xp_chars else list(self.xp_events)
         if not ev:
-            ctk.CTkLabel(self._chain_chart, text="No Chain XP data.",
-                         text_color=DIM, font=F_HEAD).pack(expand=True)
-            return
-        view = self._xp_view.get()
-        def bk(ts):
-            if view=="month": return ts.strftime("%b %Y")
-            if view=="day":   return ts.strftime("%Y-%m-%d")
-            return ts.strftime("%Y-%m-%d %Hh")
-        def sk(k):
-            if view=="month": return datetime.strptime(k,"%b %Y")
-            if view=="day":   return datetime.strptime(k,"%Y-%m-%d")
-            return datetime.strptime(k,"%Y-%m-%d %Hh")
-        bucket_chain = {}; last = {}
-        for e in sorted(ev, key=lambda x: x["ts"]):
-            key=(e["player"],e["aspect"]); b=bk(e["ts"])
-            bucket_chain.setdefault(b, 0)
-            if key in last:
-                pc,pm=last[key]
-                gained=(e["xp_cur"]-pc) if e["xp_cur"]>=pc else (pm-pc)+e["xp_cur"]
-                bucket_chain[b]+=max(0,gained)*50
-            last[key]=(e["xp_cur"],e["xp_max"])
-        buckets=sorted(bucket_chain,key=sk)
-        if len(buckets)>60: buckets=buckets[-60:]
-        n=len(buckets)
-        fig_w=max(8, n*0.85); fig_h=4.0
-        fig,ax=plt.subplots(figsize=(fig_w,fig_h),dpi=96)
-        fig.patch.set_facecolor(BG); ax.set_facecolor(BG2)
-        for sp in ax.spines.values(): sp.set_edgecolor(BG3)
-        ax.tick_params(colors=TEXT,labelsize=8,length=3)
-        ax.set_axisbelow(True)
-        ax.yaxis.grid(True,linestyle=":",linewidth=0.6,color="#333333",alpha=0.8)
-        ax.xaxis.grid(False)
-        x=np.arange(n)
-        vals=np.array([bucket_chain[b] for b in buckets])
-        bars=ax.bar(x,vals,color="#c8882a",width=0.78,edgecolor="none")
-        for bar,val in zip(bars,vals):
-            if val>0 and bar.get_height()>10000:
-                ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()/2,
-                        fmt_chain(val), ha="center", va="center",
-                        fontsize=7, color="#000000", fontweight="bold", clip_on=True)
-        lbl_map={"month":"Monthly","day":"Daily","hour":"Hourly"}
-        title=", ".join(sorted(self._xp_chars)) or "All"
-        ax.set_title(f"Chain Mastery XP — {lbl_map[view]} — {title}",
-                     color=GOLD_LT,fontsize=11,pad=8,fontweight="bold")
-        ax.set_xticks(x)
-        ax.set_xticklabels(buckets,rotation=45,ha="right",color=TEXT,fontsize=8)
-        ax.set_ylabel("Chain XP Gained",color=DIM,fontsize=9,labelpad=6)
-        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v,p: fmt_chain(v)))
-        plt.tight_layout(pad=0.5)
-        canvas=FigureCanvasTkAgg(fig,master=self._chain_chart)
-        canvas.get_tk_widget().pack(fill="both",expand=True)
-        plt.close(fig)
+            messagebox.showinfo("Export CSV","No XP data to export."); return
+        path = filedialog.asksaveasfilename(defaultextension=".csv",
+               filetypes=[("CSV files","*.csv")],
+               initialfile="xp_export.csv",
+               title="Export XP as CSV")
+        if not path: return
+        # Build last_xp map
+        last_xp = {}
+        for e in sorted(ev, key=lambda x:x["ts"]):
+            last_xp[(e["player"],e["aspect"])] = (e["xp_cur"], e["xp_max"])
+        rows = []
+        seen = {}
+        for key,(xp_cur,xp_max) in sorted(last_xp.items()):
+            player,asp = key
+            if asp in seen.get(player,set()): continue
+            seen.setdefault(player,set()).add(asp)
+            asp_ev = sorted([e for e in ev if e["aspect"]==asp and e.get("player")==player], key=lambda x:x["ts"])
+            total_g=0; prev={}
+            for e in asp_ev:
+                k2=(e["player"],e["aspect"])
+                if k2 in prev:
+                    pc,pm=prev[k2]
+                    g=(e["xp_cur"]-pc) if e["xp_cur"]>=pc else (pm-pc)+e["xp_cur"]
+                    total_g+=max(0,g)
+                prev[k2]=(e["xp_cur"],e["xp_max"])
+            span=max(1.0,(asp_ev[-1]["ts"]-asp_ev[0]["ts"]).total_seconds()/86400) if len(asp_ev)>=2 else 1.0
+            avg=total_g/span; remaining=max(0,xp_max-xp_cur)
+            est=remaining/avg if avg>0 else None
+            tier=0; cumul_prev=0
+            for t,xt,xc in self.ASPECT_XP_CUMUL:
+                if xp_cur<xc: tier=t; break
+                cumul_prev=xc; tier=t
+            total_xp=cumul_prev+xp_cur
+            rows.append({"Player":player,"Aspect":asp,"Tier":tier,
+                         "Current XP":f"{xp_cur:.1f}","Max XP":f"{xp_max:.0f}",
+                         "Total XP":f"{total_xp:.1f}","Remaining":f"{remaining:.1f}",
+                         "Avg XP/day":f"{avg:.1f}","Est. Days":f"{est:.1f}" if est else "—"})
+        try:
+            with open(path,"w",newline="",encoding="utf-8") as f:
+                w=_csv.DictWriter(f,fieldnames=["Player","Aspect","Tier","Current XP","Max XP","Total XP","Remaining","Avg XP/day","Est. Days"])
+                w.writeheader(); w.writerows(rows)
+            messagebox.showinfo("Done",f"Exported {len(rows)} aspect(s) to {path}")
+        except Exception as e:
+            messagebox.showerror("Error",str(e))
 
-    def _draw_chain_panel(self, ev):
-        """Right panel for Chain Mastery XP — link progress + est days."""
-        p = self._chain_panel
-        ctk.CTkLabel(p, text="✦  Chain Mastery", text_color=GOLD_LT,
-                     font=F_BODY_B, anchor="w").pack(fill="x", padx=10, pady=(8,2))
-        ctk.CTkFrame(p, fg_color=GOLD_DK, height=1).pack(fill="x", padx=8, pady=(0,6))
+    def _xp_discord(self):
+        """Copy XP summary for selected characters as Discord-formatted text."""
+        ev = [e for e in self.xp_events if e.get("player","") in self._xp_chars] if self._xp_chars else list(self.xp_events)
         if not ev:
-            ctk.CTkLabel(p, text="No data", text_color=DIM2, font=F_SMALL).pack(padx=8, pady=4)
-            return
-        total_chain, last = self._chain_xp_from_events(ev)
-        link, xp_in, xp_needed, xp_cumul = self._chain_link_for_xp(total_chain)
-        pct = (xp_in/xp_needed*100) if xp_needed>0 else 100
-        # Avg chain XP / day
-        ev_sorted = sorted(ev, key=lambda x: x["ts"])
-        span = max(1.0,(ev_sorted[-1]["ts"]-ev_sorted[0]["ts"]).total_seconds()/86400) if len(ev_sorted)>=2 else 1.0
-        avg_day = total_chain / span
-        remaining = max(0, xp_needed - xp_in)
-        est = remaining/avg_day if avg_day>0 else None
-        def stat_row(label, value, color=TEXT):
-            r=ctk.CTkFrame(p, fg_color=BG3, corner_radius=3); r.pack(fill="x", padx=6, pady=2)
-            ctk.CTkLabel(r, text=label, text_color=DIM, font=F_SMALL,
-                         anchor="w", width=100).pack(side="left", padx=(6,2), pady=3)
-            ctk.CTkLabel(r, text=value, text_color=color, font=F_SMALL_B,
-                         anchor="e").pack(side="right", padx=(2,6), pady=3)
-        stat_row("Current Link", f"Link {link}", GOLD)
-        stat_row("Total Chain XP", fmt_chain(total_chain), GOLD_LT)
-        stat_row("XP in Link", fmt_chain(xp_in))
-        stat_row("XP for Next", fmt_chain(xp_needed))
-        stat_row("Progress", f"{pct:.1f}%")
-        stat_row("Avg/day", fmt_chain(avg_day))
-        stat_row("Est. Days", f"{est:.1f}d" if est else "—")
-        if link < 30:
-            ctk.CTkProgressBar(p, progress_color=GOLD, fg_color=BG4,
-                                height=8, corner_radius=4).pack(fill="x", padx=10, pady=(4,2))
-            prog = p.winfo_children()[-1]; prog.set(pct/100)
+            messagebox.showinfo("Copy Discord","No XP data."); return
+        last_xp = {}
+        for e in sorted(ev, key=lambda x:x["ts"]):
+            last_xp[(e["player"],e["aspect"])] = (e["xp_cur"], e["xp_max"])
+        chars = sorted(self._xp_chars) if self._xp_chars else sorted(set(e["player"] for e in ev if e.get("player")))
+        lines = ["```","═══ OUTLANDS MULTI TRACKER — XP ═══"]
+        for player in chars:
+            lines.append(f"\n[ {player} ]")
+            seen = set()
+            for key,(xp_cur,xp_max) in sorted(last_xp.items()):
+                p,asp = key
+                if p!=player or asp in seen: continue
+                seen.add(asp)
+                asp_ev = sorted([e for e in ev if e["aspect"]==asp and e.get("player")==player], key=lambda x:x["ts"])
+                total_g=0; prev={}
+                for e in asp_ev:
+                    k2=(e["player"],e["aspect"])
+                    if k2 in prev:
+                        pc,pm=prev[k2]
+                        g=(e["xp_cur"]-pc) if e["xp_cur"]>=pc else (pm-pc)+e["xp_cur"]
+                        total_g+=max(0,g)
+                    prev[k2]=(e["xp_cur"],e["xp_max"])
+                span=max(1.0,(asp_ev[-1]["ts"]-asp_ev[0]["ts"]).total_seconds()/86400) if len(asp_ev)>=2 else 1.0
+                avg=total_g/span; remaining=max(0,xp_max-xp_cur)
+                est=remaining/avg if avg>0 else None
+                pct=xp_cur/xp_max*100 if xp_max>0 else 0
+                tier=0; cumul_prev=0
+                for t,xt,xc in self.ASPECT_XP_CUMUL:
+                    if xp_cur<xc: tier=t; break
+                    cumul_prev=xc; tier=t
+                total_xp=cumul_prev+xp_cur
+                est_txt=f"{est:.1f}d" if est else "—"
+                lines.append(f"  {asp:<12} T{tier}  {xp_cur:>9,.0f}/{xp_max:,.0f} ({pct:.0f}%)  total:{total_xp:,.0f}  avg:{avg:,.0f}/d  est:{est_txt}")
+        lines.append("```")
+        text="\n".join(lines)
+        self.clipboard_clear(); self.clipboard_append(text)
+        messagebox.showinfo("Copied!","XP data copied in Discord format.")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # GUILD
