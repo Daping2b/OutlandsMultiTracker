@@ -2399,8 +2399,8 @@ class App(ctk.CTk):
         self._guild_status_lbl.pack(pady=8)
 
     def _guild_do_login(self):
-        """Open Discord OAuth2 inside an in-app webview modal."""
-        import threading
+        """Open Discord OAuth2 in browser, capture callback via localhost server."""
+        import threading, webbrowser
         try:
             resp = self._guild_api("GET", "/auth/url")
             url  = resp["url"]
@@ -2408,59 +2408,110 @@ class App(ctk.CTk):
             messagebox.showerror("Error",
                 f"Cannot reach Guild API.\nMake sure the backend is running.\n\n{e}")
             return
-        # Open webview modal
-        self._guild_open_webview(url)
-        # Start polling for token
         self._guild_status_lbl.configure(text="Waiting for Discord login...")
-        threading.Thread(target=self._guild_wait_callback, daemon=True).start()
+        # Start local callback server then open browser
+        threading.Thread(target=self._guild_oauth_server,
+                         args=(url,), daemon=True).start()
 
-    def _guild_open_webview(self, url: str):
-        """Open a pywebview window to show the OAuth2 flow."""
-        import threading
-        def _run():
-            try:
-                import webview
-                window = webview.create_window(
-                    "Connect with Discord", url,
-                    width=520, height=700,
-                    resizable=False
-                )
-                self._guild_webview_ref = window
-                webview.start()
-            except ImportError:
-                import webbrowser
-                webbrowser.open(url)
-        threading.Thread(target=_run, daemon=True).start()
+    def _guild_oauth_server(self, oauth_url: str):
+        """Spin up a temporary localhost HTTP server to catch the OAuth2 callback."""
+        import http.server, urllib.parse, webbrowser, threading
 
-    def _guild_wait_callback(self):
-        """Poll /auth/pending every second for up to 3 minutes."""
-        import time, urllib.request, json as _json
-        for _ in range(180):
-            time.sleep(1)
-            try:
-                req = urllib.request.Request(
-                    self.GUILD_API + "/auth/pending",
-                    headers={"User-Agent": "OMT/1.0"}
-                )
-                with urllib.request.urlopen(req, timeout=3) as r:
-                    data = _json.loads(r.read())
-                    if data.get("session_token"):
-                        token = data["session_token"]
-                        self._guild_session_token = token
-                        self._save_guild_token(token)
-                        # Close webview if open
-                        def _close():
-                            try:
-                                import webview
-                                for w in webview.windows:
-                                    w.destroy()
-                            except: pass
-                        self.after(0, _close)
-                        self.after(100, self._guild_render)
-                        return
-            except: pass
-        self.after(0, lambda: self._guild_status_lbl.configure(
-            text="Login timed out. Please try again."))
+        result = {"code": None, "state": None, "error": None}
+        server_ready = threading.Event()
+
+        class CallbackHandler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args): pass  # silence access logs
+
+            def do_GET(self):
+                parsed = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed.query)
+                if "code" in params:
+                    result["code"]  = params["code"][0]
+                    result["state"] = params.get("state", [None])[0]
+                    html = self._success_html()
+                elif "error" in params:
+                    result["error"] = params["error"][0]
+                    html = self._error_html(params["error"][0])
+                else:
+                    html = b"<html><body>Unexpected request.</body></html>"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(html)
+                # Signal to shut down server after response sent
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+
+            def _success_html(self):
+                return b"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{background:#080808;color:#e8dcc8;font-family:'Segoe UI',sans-serif;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+.box{background:#111;border:1px solid #c8952a;border-radius:10px;padding:40px 60px;text-align:center;}
+h2{color:#c8952a;} p{color:#aa9980;}</style></head>
+<body><div class="box"><div style="font-size:48px">&#10022;</div>
+<h2>Connected!</h2><p>You can close this tab.<br>OMT will update automatically.</p>
+</div></body></html>"""
+
+            def _error_html(self, err):
+                return (f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{{background:#080808;color:#e8dcc8;font-family:'Segoe UI',sans-serif;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+.box{{background:#111;border:1px solid #cc3333;border-radius:10px;padding:40px 60px;text-align:center;}}
+h2{{color:#cc3333;}} p{{color:#aa9980;}}</style></head>
+<body><div class="box"><h2>Authentication Failed</h2>
+<p>{err}</p></div></body></html>""").encode()
+
+        try:
+            server = http.server.HTTPServer(("localhost", 8766), CallbackHandler)
+        except OSError:
+            # Port in use — try next port
+            server = http.server.HTTPServer(("localhost", 8767), CallbackHandler)
+
+        # Open browser AFTER server is ready
+        import webbrowser
+        webbrowser.open(oauth_url)
+
+        server.serve_forever()  # blocks until shutdown() called in handler
+
+        # Server shut down — process result
+        if result["code"]:
+            self._guild_exchange_code(result["code"], result["state"])
+        else:
+            err = result.get("error", "Unknown error")
+            self.after(0, lambda: self._guild_status_lbl.configure(
+                text=f"Login failed: {err}"))
+
+    def _guild_exchange_code(self, code: str, state: str):
+        """Send the OAuth2 code to the backend and get session token."""
+        import urllib.request, urllib.parse, json as _json
+        try:
+            url = (self.GUILD_API + "/auth/callback?"
+                   + urllib.parse.urlencode({"code": code, "state": state or ""}))
+            req = urllib.request.Request(url, headers={"User-Agent": "OMT/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                # Backend returns HTML page — token is in pending endpoint
+                pass
+        except Exception:
+            pass
+        # Now fetch the pending token
+        try:
+            req2 = urllib.request.Request(
+                self.GUILD_API + "/auth/pending",
+                headers={"User-Agent": "OMT/1.0"}
+            )
+            with urllib.request.urlopen(req2, timeout=5) as r:
+                data = _json.loads(r.read())
+            token = data.get("session_token")
+            if token:
+                self._guild_session_token = token
+                self._save_guild_token(token)
+                self.after(0, self._guild_render)
+            else:
+                self.after(0, lambda: self._guild_status_lbl.configure(
+                    text="Login failed — no token received."))
+        except Exception as e:
+            self.after(0, lambda: self._guild_status_lbl.configure(
+                text=f"Login error: {e}"))
 
     # ── State 2: Profile (logged in, no guild) ────────────────────────────────
     def _guild_state_profile(self, me: dict):

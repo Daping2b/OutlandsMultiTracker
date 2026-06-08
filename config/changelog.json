@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.67.4",
+    "date": "2026-06-08",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Guild login — OAuth2 via localhost callback server (industry standard, no external libs)" }
+    ]
+  },
+  {
     "version": "0.67.3",
     "date": "2026-06-08",
     "changes": [
