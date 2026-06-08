@@ -2421,7 +2421,7 @@ class App(ctk.CTk):
         server_ready = threading.Event()
 
         class CallbackHandler(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *args): pass  # silence access logs
+            def log_message(self, *args): pass
 
             def do_GET(self):
                 parsed = urllib.parse.urlparse(self.path)
@@ -2439,7 +2439,6 @@ class App(ctk.CTk):
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(html)
-                # Signal to shut down server after response sent
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
 
             def _success_html(self):
@@ -2461,45 +2460,32 @@ h2{{color:#cc3333;}} p{{color:#aa9980;}}</style></head>
 <body><div class="box"><h2>Authentication Failed</h2>
 <p>{err}</p></div></body></html>""").encode()
 
+        # Bind server first, THEN open browser — eliminates race condition
+        port = 8766
         try:
-            server = http.server.HTTPServer(("localhost", 8766), CallbackHandler)
+            server = http.server.HTTPServer(("localhost", port), CallbackHandler)
         except OSError:
-            # Port in use — try next port
-            server = http.server.HTTPServer(("localhost", 8767), CallbackHandler)
+            port = 8767
+            server = http.server.HTTPServer(("localhost", port), CallbackHandler)
 
-        # Open browser AFTER server is ready
-        import webbrowser
+        server_ready.set()
         webbrowser.open(oauth_url)
+        server.serve_forever()
 
-        server.serve_forever()  # blocks until shutdown() called in handler
-
-        # Server shut down — process result
         if result["code"]:
             self._guild_exchange_code(result["code"], result["state"])
         else:
             err = result.get("error", "Unknown error")
             self.after(0, lambda: self._guild_status_lbl.configure(
                 text=f"Login failed: {err}"))
-
     def _guild_exchange_code(self, code: str, state: str):
-        """Send the OAuth2 code to the backend and get session token."""
+        """Send the OAuth2 code to the backend and get session token directly."""
         import urllib.request, urllib.parse, json as _json
         try:
             url = (self.GUILD_API + "/auth/callback?"
                    + urllib.parse.urlencode({"code": code, "state": state or ""}))
             req = urllib.request.Request(url, headers={"User-Agent": "OMT/1.0"})
             with urllib.request.urlopen(req, timeout=10) as r:
-                # Backend returns HTML page — token is in pending endpoint
-                pass
-        except Exception:
-            pass
-        # Now fetch the pending token
-        try:
-            req2 = urllib.request.Request(
-                self.GUILD_API + "/auth/pending",
-                headers={"User-Agent": "OMT/1.0"}
-            )
-            with urllib.request.urlopen(req2, timeout=5) as r:
                 data = _json.loads(r.read())
             token = data.get("session_token")
             if token:
@@ -2508,7 +2494,7 @@ h2{{color:#cc3333;}} p{{color:#aa9980;}}</style></head>
                 self.after(0, self._guild_render)
             else:
                 self.after(0, lambda: self._guild_status_lbl.configure(
-                    text="Login failed — no token received."))
+                    text="Login failed — no token in response."))
         except Exception as e:
             self.after(0, lambda: self._guild_status_lbl.configure(
                 text=f"Login error: {e}"))

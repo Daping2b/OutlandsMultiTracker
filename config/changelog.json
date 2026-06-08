@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.67.5",
+    "date": "2026-06-08",
+    "changes": [
+      { "type": "BUG FIX", "text": "Guild login — token lu directement depuis la réponse callback, fixed" }
+    ]
+  },
+  {
     "version": "0.67.4",
     "date": "2026-06-08",
     "changes": [
