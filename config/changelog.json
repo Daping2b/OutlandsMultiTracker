@@ -1,5 +1,30 @@
 [
   {
+    "version": "0.67.2",
+    "date": "2026-06-08",
+    "changes": [
+      { "type": "IMPROVEMENT", "text": "Guild login — Discord OAuth2 opens inside OMT (in-app webview)" },
+      { "type": "IMPROVEMENT", "text": "Guild backend — callback returns styled HTML page, pending token flow" }
+    ]
+  },
+  {
+    "version": "0.67.1",
+    "date": "2026-06-08",
+    "changes": [
+      { "type": "BUG FIX", "text": "Experience table — centered, reduced width, text centered" },
+      { "type": "BUG FIX", "text": "Experience chart — left gap removed" }
+    ]
+  },
+  {
+    "version": "0.67",
+    "date": "2026-06-08",
+    "changes": [
+      { "type": "NEW FEATURE", "text": "Guild system — Discord OAuth2 login, profile page, guild view with members and grades" },
+      { "type": "NEW FEATURE", "text": "Guild backend — FastAPI + SQLite, Discord bot with member sync" },
+      { "type": "NEW FEATURE", "text": "SuperAdmin panel — list/delete users and guilds (Daping only)" }
+    ]
+  },
+  {
     "version": "0.66.5",
     "date": "2026-06-05",
     "changes": [

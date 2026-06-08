@@ -1966,11 +1966,12 @@ class App(ctk.CTk):
         self._xp_chars=set()
         # ── Chart — fills most of the page ───────────────────────────────────
         self._xp_chart=ctk.CTkFrame(page,fg_color=BG)
-        self._xp_chart.pack(fill="both",expand=True,padx=8,pady=(8,4))
-        # ── Table — full width below chart ───────────────────────────────────
+        self._xp_chart.pack(fill="both",expand=True,pady=(8,4))
+        # ── Table — centered, fixed width below chart ─────────────────────────
         self._xp_table=ctk.CTkScrollableFrame(page,fg_color=BG2,height=220,
-                                               border_width=1,border_color=BORDER)
-        self._xp_table.pack(fill="x",padx=8,pady=(0,8))
+                                               border_width=1,border_color=BORDER,
+                                               width=800)
+        self._xp_table.pack(anchor="center",pady=(0,8))
         self._refresh_xp()
 
     def _all_time_xp(self):
@@ -2174,13 +2175,14 @@ class App(ctk.CTk):
 
 
     def _draw_xp_table(self, ev, last_xp):
-        ctk.CTkLabel(self._xp_table, text="  ✦  Estimated Days to Next Level",
-                     text_color=GOLD, font=F_TITLE).pack(anchor="w", padx=8, pady=(8,4))
+        ctk.CTkLabel(self._xp_table, text="✦  Estimated Days to Next Level",
+                     text_color=GOLD, font=F_TITLE).pack(anchor="center", pady=(8,4))
         ctk.CTkFrame(self._xp_table, fg_color=GOLD_DK, height=1).pack(fill="x", padx=8, pady=(0,6))
-        hdr=ctk.CTkFrame(self._xp_table, fg_color=BG3); hdr.pack(fill="x", padx=4, pady=(0,4))
+        hdr=ctk.CTkFrame(self._xp_table, fg_color=BG3); hdr.pack(anchor="center", pady=(0,4))
         for col,w in [("Aspect",125),("Tier",50),("Current XP",115),("Max XP",115),
                       ("Remaining",115),("Avg XP/day",115),("Est. Days",100)]:
-            ctk.CTkLabel(hdr, text=col, width=w, text_color=GOLD, font=F_BODY_B).pack(side="left", padx=4, pady=4)
+            ctk.CTkLabel(hdr, text=col, width=w, text_color=GOLD,
+                         font=F_BODY_B, justify="center").pack(side="left", padx=4, pady=4)
         seen={}
         for key,(xp_cur,xp_max) in sorted(last_xp.items()):
             _,asp=key
@@ -2203,13 +2205,15 @@ class App(ctk.CTk):
                 if xp_cur<xc: tier=t; break
                 cumul_prev=xc; tier=t
             color=ASPECT_COLORS.get(asp,TEXT)
-            row=ctk.CTkFrame(self._xp_table, fg_color=BG2, corner_radius=4); row.pack(fill="x", padx=4, pady=1)
+            row=ctk.CTkFrame(self._xp_table, fg_color=BG2, corner_radius=4)
+            row.pack(anchor="center", pady=1)
             for text,w in [(asp,125),(str(tier),50),(f"{xp_cur:,.1f}",115),(f"{xp_max:,.0f}",115),
                            (f"{remaining:,.1f}",115),(f"{avg_day:,.1f}",115),
-                           (f"{est:.1f} days" if est else "—",100)]:
+                           (f"{est:.1f}d" if est else "—",100)]:
                 ctk.CTkLabel(row, text=text, width=w,
                              text_color=color if text==asp else TEXT,
-                             font=F_BODY_B if text==asp else F_BODY).pack(side="left", padx=4, pady=3)
+                             font=F_BODY_B if text==asp else F_BODY,
+                             justify="center").pack(side="left", padx=4, pady=3)
 
     def _xp_csv(self):
         """Export XP data for selected characters to CSV."""
@@ -2306,19 +2310,334 @@ class App(ctk.CTk):
     # ═══════════════════════════════════════════════════════════════════════════
     # GUILD
     # ═══════════════════════════════════════════════════════════════════════════
+    # ── Guild API helper ───────────────────────────────────────────────────────
+    GUILD_API = "http://localhost:8765"
+
+    def _guild_api(self, method: str, path: str, params: dict = None, body: dict = None) -> dict:
+        """Make a request to the Guild API. Returns dict or raises."""
+        import urllib.request, urllib.parse, json as _json
+        url = self.GUILD_API + path
+        if params:
+            url += "?" + urllib.parse.urlencode(params)
+        data = _json.dumps(body).encode() if body else None
+        req = urllib.request.Request(
+            url, data=data, method=method,
+            headers={"Content-Type": "application/json", "User-Agent": "OMT/1.0"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=8) as r:
+                return _json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            msg = e.read().decode()
+            try: msg = _json.loads(msg).get("detail", msg)
+            except: pass
+            raise RuntimeError(msg)
+        except Exception as e:
+            raise RuntimeError(str(e))
+
     def _build_guild(self):
-        page=ctk.CTkFrame(self._body,fg_color=BG,corner_radius=0)
-        self._pages["Guild"]=page
-        _,scroll,_=make_scrollable(page,bg=BG)
-        ico=load_pil("guild.png",transparent=True)
+        page = ctk.CTkFrame(self._body, fg_color=BG, corner_radius=0)
+        self._pages["Guild"] = page
+        self._guild_session_token = self._load_guild_token()
+        self._guild_page = page
+        self._guild_render()
+
+    def _load_guild_token(self) -> str | None:
+        """Load persisted session token from settings."""
+        return self.settings.get("guild_token")
+
+    def _save_guild_token(self, token: str | None):
+        """Persist session token in settings."""
+        if token:
+            self.settings["guild_token"] = token
+        else:
+            self.settings.pop("guild_token", None)
+        save_json(SETTINGS_F, self.settings)
+
+    def _guild_render(self):
+        """Render the appropriate Guild state into self._guild_page."""
+        for w in self._guild_page.winfo_children(): w.destroy()
+        if not self._guild_session_token:
+            self._guild_state_login()
+        else:
+            # Verify token and get user
+            try:
+                me = self._guild_api("GET", "/auth/me",
+                                     params={"token": self._guild_session_token})
+                self._guild_me = me
+                if me.get("memberships"):
+                    self._guild_state_guild(me)
+                else:
+                    self._guild_state_profile(me)
+            except RuntimeError:
+                # Token expired or invalid
+                self._guild_session_token = None
+                self._save_guild_token(None)
+                self._guild_state_login()
+
+    # ── State 1: Login ────────────────────────────────────────────────────────
+    def _guild_state_login(self):
+        p = self._guild_page
+        ctk.CTkFrame(p, height=60, fg_color="transparent").pack()
+        ico = load_pil("guild.png", transparent=True)
         if ico:
-            ico=ico.resize((120,120),Image.LANCZOS)
-            ph=ImageTk.PhotoImage(ico); self._keep(ph)
-            ctk.CTkLabel(scroll,image=ph,text="",fg_color=BG).pack(pady=(40,16))
-        ctk.CTkLabel(scroll,text="Guild",font=("Georgia",28,"bold"),text_color=GOLD_LT).pack()
-        ctk.CTkFrame(scroll,fg_color=GOLD_DK,height=1).pack(fill="x",padx=80,pady=12)
-        ctk.CTkLabel(scroll,text="Coming Soon",font=("Palatino Linotype",18,"italic"),
-                     text_color="#cc3333").pack(pady=8)
+            ico = ico.resize((100, 100), Image.LANCZOS)
+            ph  = ImageTk.PhotoImage(ico); self._keep(ph)
+            ctk.CTkLabel(p, image=ph, text="", fg_color=BG).pack(pady=(20, 8))
+        ctk.CTkLabel(p, text="Guild", font=("Georgia", 28, "bold"),
+                     text_color=GOLD_LT).pack()
+        ctk.CTkFrame(p, fg_color=GOLD_DK, height=1).pack(fill="x", padx=120, pady=12)
+        ctk.CTkLabel(p, text="Connect your Discord account to access Guild features.",
+                     font=F_BODY, text_color=DIM).pack(pady=(0, 20))
+        ctk.CTkButton(p, text="🎮  Connect with Discord",
+                      font=("Segoe UI", 14, "bold"),
+                      fg_color="#5865F2", hover_color="#4752C4",
+                      text_color="white", width=260, height=48,
+                      corner_radius=8,
+                      command=self._guild_do_login).pack()
+        self._guild_status_lbl = ctk.CTkLabel(p, text="", text_color=DIM2, font=F_SMALL)
+        self._guild_status_lbl.pack(pady=8)
+
+    def _guild_do_login(self):
+        """Open Discord OAuth2 inside an in-app webview modal."""
+        import threading
+        try:
+            resp = self._guild_api("GET", "/auth/url")
+            url  = resp["url"]
+        except RuntimeError as e:
+            messagebox.showerror("Error",
+                f"Cannot reach Guild API.\nMake sure the backend is running.\n\n{e}")
+            return
+        # Open webview modal
+        self._guild_open_webview(url)
+        # Start polling for token
+        self._guild_status_lbl.configure(text="Waiting for Discord login...")
+        threading.Thread(target=self._guild_wait_callback, daemon=True).start()
+
+    def _guild_open_webview(self, url: str):
+        """Open a CTkToplevel with tkinterweb to show the OAuth2 flow."""
+        try:
+            from tkinterweb import HtmlFrame
+        except ImportError:
+            # Fallback to browser if tkinterweb not installed
+            import webbrowser
+            webbrowser.open(url)
+            messagebox.showinfo("Login",
+                "A browser window has opened.\nLog in with Discord then return here.")
+            return
+        win = ctk.CTkToplevel(self)
+        win.title("Connect with Discord")
+        win.geometry("520x640")
+        win.configure(fg_color=BG)
+        win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        self._guild_webview_win = win
+        frame = HtmlFrame(win, messages_enabled=False)
+        frame.pack(fill="both", expand=True)
+        frame.load_url(url)
+
+    def _guild_wait_callback(self):
+        """Poll /auth/pending every second for up to 3 minutes."""
+        import time, urllib.request, json as _json
+        for _ in range(180):
+            time.sleep(1)
+            try:
+                req = urllib.request.Request(
+                    self.GUILD_API + "/auth/pending",
+                    headers={"User-Agent": "OMT/1.0"}
+                )
+                with urllib.request.urlopen(req, timeout=3) as r:
+                    data = _json.loads(r.read())
+                    if data.get("session_token"):
+                        token = data["session_token"]
+                        self._guild_session_token = token
+                        self._save_guild_token(token)
+                        # Close webview if open
+                        def _close():
+                            if hasattr(self, "_guild_webview_win"):
+                                try: self._guild_webview_win.destroy()
+                                except: pass
+                        self.after(0, _close)
+                        self.after(100, self._guild_render)
+                        return
+            except: pass
+        self.after(0, lambda: self._guild_status_lbl.configure(
+            text="Login timed out. Please try again."))
+
+    # ── State 2: Profile (logged in, no guild) ────────────────────────────────
+    def _guild_state_profile(self, me: dict):
+        p = self._guild_page
+        # Header
+        hdr = ctk.CTkFrame(p, fg_color=BG2, height=70, corner_radius=0)
+        hdr.pack(fill="x"); hdr.pack_propagate(False)
+        ctk.CTkFrame(hdr, fg_color=GOLD_DK, height=1).place(relx=0, rely=1.0, relwidth=1.0, anchor="sw")
+        # Avatar
+        self._guild_load_avatar(hdr, me.get("avatar"), size=46)
+        ctk.CTkLabel(hdr, text=me.get("username","?"),
+                     font=("Segoe UI", 15, "bold"), text_color=TEXT).pack(side="left", padx=8)
+        if me.get("is_superadmin"):
+            ctk.CTkLabel(hdr, text="⚡ SuperAdmin", text_color="#ff4444",
+                         font=F_SMALL_B).pack(side="left", padx=4)
+        gold_btn(hdr, "Logout", self._guild_logout, w=90, h=32).pack(side="right", padx=12)
+        # Content
+        ctk.CTkFrame(p, height=30, fg_color="transparent").pack()
+        ctk.CTkLabel(p, text="You are not in any guild yet.",
+                     font=F_HEAD, text_color=DIM).pack(pady=(0, 4))
+        ctk.CTkLabel(p, text="Create a new guild or join an existing one.",
+                     font=F_BODY, text_color=DIM2).pack(pady=(0, 30))
+        btn_row = ctk.CTkFrame(p, fg_color="transparent"); btn_row.pack()
+        gold_btn(btn_row, "⚔  Create Guild", self._guild_create_flow, w=180, h=44).pack(side="left", padx=12)
+        dim_btn(btn_row, "🔎  Join Guild",   self._guild_join_flow,   w=160, h=44).pack(side="left", padx=12)
+        if me.get("is_superadmin"):
+            ctk.CTkFrame(p, height=20, fg_color="transparent").pack()
+            dim_btn(p, "🛠  Admin Panel", self._guild_admin_panel, w=160, h=36).pack()
+
+    # ── State 3: Guild view ───────────────────────────────────────────────────
+    def _guild_state_guild(self, me: dict):
+        p = self._guild_page
+        # Header
+        hdr = ctk.CTkFrame(p, fg_color=BG2, height=70, corner_radius=0)
+        hdr.pack(fill="x"); hdr.pack_propagate(False)
+        ctk.CTkFrame(hdr, fg_color=GOLD_DK, height=1).place(relx=0, rely=1.0, relwidth=1.0, anchor="sw")
+        self._guild_load_avatar(hdr, me.get("avatar"), size=46)
+        ctk.CTkLabel(hdr, text=me.get("username","?"),
+                     font=("Segoe UI", 15, "bold"), text_color=TEXT).pack(side="left", padx=8)
+        gold_btn(hdr, "Logout", self._guild_logout, w=90, h=32).pack(side="right", padx=12)
+        # For each membership, show guild panel
+        _, scroll, _ = make_scrollable(p, bg=BG)
+        for m in me.get("memberships", []):
+            self._guild_draw_guild_panel(scroll, m["guild_id"], m["omt_grade"])
+
+    def _guild_draw_guild_panel(self, parent, guild_id: str, omt_grade: str):
+        """Draw a panel for one guild."""
+        try:
+            g = self._guild_api("GET", f"/guild/{guild_id}",
+                                params={"token": self._guild_session_token})
+        except RuntimeError as e:
+            ctk.CTkLabel(parent, text=f"Error loading guild: {e}",
+                         text_color=RED, font=F_SMALL).pack(padx=20, pady=4)
+            return
+        # Panel
+        border = ctk.CTkFrame(parent, fg_color=GOLD_DK, corner_radius=6)
+        border.pack(fill="x", padx=20, pady=8)
+        panel = ctk.CTkFrame(border, fg_color=BG3, corner_radius=5)
+        panel.pack(fill="both", expand=True, padx=1, pady=1)
+        # Guild header
+        ghdr = ctk.CTkFrame(panel, fg_color=BG2, corner_radius=0, height=42)
+        ghdr.pack(fill="x"); ghdr.pack_propagate(False)
+        ctk.CTkLabel(ghdr, text=f"  ⚔  {g['name']}",
+                     font=("Georgia", 14, "bold"), text_color=GOLD_LT,
+                     anchor="w").pack(side="left", padx=8)
+        grade_colors = {"leader":"#FFD700","officer":"#C0C0C0","member":TEXT,"recruit":DIM}
+        ctk.CTkLabel(ghdr, text=omt_grade.upper(),
+                     font=F_SMALL_B,
+                     text_color=grade_colors.get(omt_grade, DIM)).pack(side="right", padx=12)
+        ctk.CTkFrame(panel, fg_color=BORDER, height=1).pack(fill="x")
+        # Description
+        if g.get("description"):
+            ctk.CTkLabel(panel, text=g["description"],
+                         font=F_BODY, text_color=DIM, anchor="w",
+                         wraplength=700).pack(fill="x", padx=12, pady=6)
+        # Members list
+        ctk.CTkLabel(panel, text=f"  Members ({len(g['members'])})",
+                     font=F_BODY_B, text_color=GOLD, anchor="w").pack(fill="x", padx=10, pady=(4,2))
+        for member in g["members"][:10]:
+            mrow = ctk.CTkFrame(panel, fg_color=BG4, corner_radius=3)
+            mrow.pack(fill="x", padx=10, pady=1)
+            ctk.CTkLabel(mrow, text=member["username"],
+                         font=F_SMALL, text_color=TEXT,
+                         anchor="w", width=180).pack(side="left", padx=8, pady=3)
+            ctk.CTkLabel(mrow, text=member["omt_grade"],
+                         font=F_SMALL, text_color=grade_colors.get(member["omt_grade"], DIM),
+                         anchor="w").pack(side="left", padx=4)
+        if omt_grade == "leader":
+            dim_btn(panel, "⚙  Manage Guild", lambda gid=guild_id: self._guild_manage(gid),
+                    w=150, h=30).pack(anchor="e", padx=10, pady=6)
+
+    # ── Avatar loader ─────────────────────────────────────────────────────────
+    def _guild_load_avatar(self, parent, url: str | None, size: int = 46):
+        """Load Discord avatar from URL and display it."""
+        if not url: return
+        import threading, urllib.request
+        from PIL import Image as PILImage
+        import io
+        def _fetch():
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "OMT/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    data = r.read()
+                img = PILImage.open(io.BytesIO(data)).convert("RGBA").resize((size, size), PILImage.LANCZOS)
+                ph  = ImageTk.PhotoImage(img)
+                self._keep(ph)
+                self.after(0, lambda: ctk.CTkLabel(parent, image=ph, text="",
+                           fg_color="transparent").pack(side="left", padx=(12,4)))
+            except: pass
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    # ── Flows ─────────────────────────────────────────────────────────────────
+    def _guild_create_flow(self):
+        messagebox.showinfo("Create Guild",
+            "Feature coming soon.\nMake sure the OMT backend is running, then try again.")
+
+    def _guild_join_flow(self):
+        messagebox.showinfo("Join Guild",
+            "Feature coming soon.\nMake sure the OMT backend is running, then try again.")
+
+    def _guild_manage(self, guild_id: str):
+        messagebox.showinfo("Manage Guild", f"Guild management panel coming soon.\nGuild ID: {guild_id}")
+
+    def _guild_admin_panel(self):
+        """SuperAdmin debug panel."""
+        win = ctk.CTkToplevel(self)
+        win.title("SuperAdmin Panel")
+        win.geometry("700x500")
+        win.configure(fg_color=BG)
+        win.grab_set()
+        ctk.CTkLabel(win, text="⚡ SuperAdmin Panel",
+                     font=("Georgia", 16, "bold"), text_color="#ff4444").pack(pady=12)
+        ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=20)
+        tab = ctk.CTkFrame(win, fg_color="transparent"); tab.pack(fill="x", padx=12, pady=8)
+        def load_section(endpoint, label):
+            for w in content.winfo_children(): w.destroy()
+            ctk.CTkLabel(content, text=f"Loading {label}...",
+                         text_color=DIM, font=F_BODY).pack(pady=20)
+            import threading
+            def _fetch():
+                try:
+                    data = self._guild_api("GET", endpoint,
+                                           params={"token": self._guild_session_token})
+                    self.after(0, lambda: _render(data, label))
+                except RuntimeError as e:
+                    self.after(0, lambda: ctk.CTkLabel(content, text=f"Error: {e}",
+                               text_color=RED, font=F_SMALL).pack(pady=8))
+            threading.Thread(target=_fetch, daemon=True).start()
+        def _render(data, label):
+            for w in content.winfo_children(): w.destroy()
+            ctk.CTkLabel(content, text=f"{label} ({len(data)} entries)",
+                         text_color=GOLD, font=F_BODY_B, anchor="w").pack(fill="x", padx=8, pady=4)
+            for item in data:
+                row = ctk.CTkFrame(content, fg_color=BG3, corner_radius=3)
+                row.pack(fill="x", padx=6, pady=1)
+                text = " | ".join(f"{k}: {v}" for k, v in list(item.items())[:4])
+                ctk.CTkLabel(row, text=text, font=F_SMALL, text_color=TEXT,
+                             anchor="w", wraplength=600).pack(side="left", padx=6, pady=3)
+        dim_btn(tab, "Users",  lambda: load_section("/admin/users",  "Users"),  w=80, h=28).pack(side="left", padx=4)
+        dim_btn(tab, "Guilds", lambda: load_section("/admin/guilds", "Guilds"), w=80, h=28).pack(side="left", padx=4)
+        dim_btn(tab, "Stats",  lambda: load_section("/admin/stats",  "Stats"),  w=80, h=28).pack(side="left", padx=4)
+        _, content, _ = make_scrollable(win, bg=BG2)
+        ctk.CTkLabel(content, text="Select a category above.",
+                     text_color=DIM2, font=F_BODY).pack(pady=30)
+
+    def _guild_logout(self):
+        try:
+            self._guild_api("POST", "/auth/logout",
+                            params={"token": self._guild_session_token})
+        except: pass
+        self._guild_session_token = None
+        self._save_guild_token(None)
+        self._guild_render()
+
+
 
     # ═══════════════════════════════════════════════════════════════════════════
     # HOW TO
