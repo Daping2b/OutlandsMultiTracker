@@ -1,6 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 # OutlandsMultiTracker PyInstaller spec
-# console=False temporarily to see image debug output
 block_cipher = None
 
 a = Analysis(
@@ -23,6 +22,9 @@ a = Analysis(
         'tkcalendar',
         'babel.numbers',
         'babel.dates',
+        'webview',
+        'webview.platforms.winforms',
+        'clr',
     ],
     hookspath=[],
     runtime_hooks=[],
@@ -43,7 +45,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,   # <-- set True to see debug output, change to False once images work
+    console=False,
     icon='assets\\O-MTSmall.png',
 )
 

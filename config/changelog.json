@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.67.3",
+    "date": "2026-06-08",
+    "changes": [
+      { "type": "BUG FIX", "text": "Guild login — switched from tkinterweb to pywebview for JavaScript support" }
+    ]
+  },
+  {
     "version": "0.67.2",
     "date": "2026-06-08",
     "changes": [

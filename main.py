@@ -2415,26 +2415,22 @@ class App(ctk.CTk):
         threading.Thread(target=self._guild_wait_callback, daemon=True).start()
 
     def _guild_open_webview(self, url: str):
-        """Open a CTkToplevel with tkinterweb to show the OAuth2 flow."""
-        try:
-            from tkinterweb import HtmlFrame
-        except ImportError:
-            # Fallback to browser if tkinterweb not installed
-            import webbrowser
-            webbrowser.open(url)
-            messagebox.showinfo("Login",
-                "A browser window has opened.\nLog in with Discord then return here.")
-            return
-        win = ctk.CTkToplevel(self)
-        win.title("Connect with Discord")
-        win.geometry("520x640")
-        win.configure(fg_color=BG)
-        win.grab_set()
-        win.protocol("WM_DELETE_WINDOW", win.destroy)
-        self._guild_webview_win = win
-        frame = HtmlFrame(win, messages_enabled=False)
-        frame.pack(fill="both", expand=True)
-        frame.load_url(url)
+        """Open a pywebview window to show the OAuth2 flow."""
+        import threading
+        def _run():
+            try:
+                import webview
+                window = webview.create_window(
+                    "Connect with Discord", url,
+                    width=520, height=700,
+                    resizable=False
+                )
+                self._guild_webview_ref = window
+                webview.start()
+            except ImportError:
+                import webbrowser
+                webbrowser.open(url)
+        threading.Thread(target=_run, daemon=True).start()
 
     def _guild_wait_callback(self):
         """Poll /auth/pending every second for up to 3 minutes."""
@@ -2454,9 +2450,11 @@ class App(ctk.CTk):
                         self._save_guild_token(token)
                         # Close webview if open
                         def _close():
-                            if hasattr(self, "_guild_webview_win"):
-                                try: self._guild_webview_win.destroy()
-                                except: pass
+                            try:
+                                import webview
+                                for w in webview.windows:
+                                    w.destroy()
+                            except: pass
                         self.after(0, _close)
                         self.after(100, self._guild_render)
                         return
