@@ -16,25 +16,41 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: pip install requests
 
-      - name: Fetch bonuses from Discord
-        env:
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          CHANNEL_ID: "605516711692599297"
+      - name: Fetch bonuses from Outlands Butler
         run: |
           python3 << 'PYEOF'
-          import requests, json, re, os, sys
+          import requests, json, sys
           from datetime import datetime, timezone, timedelta
 
-          token      = os.environ["DISCORD_TOKEN"]
-          channel_id = os.environ["CHANNEL_ID"]
-          headers    = {"Authorization": token, "User-Agent": "OMT-BonusFetcher/1.0"}
+          SUPABASE_URL = "https://inbuomjlmfztlaknwjze.supabase.co/rest/v1/weeklyBonuses"
+          SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluYnVvbWpsbWZ6dGxha253anplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMDQ5MTgsImV4cCI6MjA5NDc4MDk1OH0.5Sxe5ApAsmzTq27z_C18IHGO55MIEVk5xahSouP1Sy0"
+
+          headers = {
+              "apikey":        SUPABASE_KEY,
+              "Authorization": f"Bearer {SUPABASE_KEY}",
+              "Accept":        "application/json",
+              "Origin":        "https://www.outlandsbutler.com",
+              "Referer":       "https://www.outlandsbutler.com/",
+              "User-Agent":    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+          }
+
+          r = requests.get(f"{SUPABASE_URL}?select=*&order=id.asc", headers=headers, timeout=15)
+          if r.status_code != 200:
+              print(f"Supabase API error: {r.status_code} {r.text}")
+              sys.exit(1)
+
+          rows = r.json()
+          print(f"Fetched {len(rows)} rows from Supabase")
+          if not rows:
+              print("No data returned")
+              sys.exit(1)
 
           bonuses_path = "config/bonuses.json"
           try:
@@ -47,84 +63,35 @@ jobs:
               days_since_sat = (dt.weekday() + 2) % 7
               return (dt - timedelta(days=days_since_sat)).strftime("%Y-%m-%d")
 
-          url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=100"
-          r = requests.get(url, headers=headers)
-          if r.status_code != 200:
-              print(f"Discord API error: {r.status_code} {r.text}")
-              sys.exit(1)
-
-          messages = r.json()
-          print(f"Fetched {len(messages)} messages")
-
-          bonus_types = {
-              "sanctuary dungeon": "sanctuary",
-              "challenger dungeon": "challenger",
-              "faster respawn":     "respawn",
-              "gold loot":          "gold_loot",
-              "experience":         "experience",
-              "vendor rebate":      "vendor",
-              "exceptional crafting": "crafting",
-          }
-
           new_entries = 0
-          for msg in messages:
-              content = msg.get("content","")
-              for embed in msg.get("embeds",[]):
-                  content += "\n" + embed.get("description","") + "\n" + embed.get("title","")
-                  for field in embed.get("fields",[]):
-                      content += f"\n{field.get('name','')}\n{field.get('value','')}"
-
-              if "Regional Bonuses" not in content and "regional bonuses" not in content.lower():
-                  continue
-
-              ts_str = msg.get("timestamp","")
+          for row in rows:
+              print(f"Row keys: {list(row.keys())} — sample: {str(row)[:200]}")
+              # Adapt key mapping based on actual column names
+              week_date = row.get("week_start") or row.get("weekStart") or row.get("date") or row.get("created_at","")
               try:
-                  ts = datetime.fromisoformat(ts_str.replace("Z","+00:00"))
-                  week_key = get_week_key(ts.astimezone(timezone.utc).replace(tzinfo=None))
+                  dt = datetime.fromisoformat(str(week_date).replace("Z","+00:00"))
+                  week_key = get_week_key(dt.replace(tzinfo=None))
               except:
                   week_key = get_week_key(datetime.utcnow())
 
               if week_key in bonuses:
-                  print(f"Week {week_key} already in bonuses, skipping")
+                  print(f"Week {week_key} already present, skipping")
                   continue
 
-              lines = [l.strip() for l in content.split("\n") if l.strip()]
-              week_bonuses = {}
-              i = 0
-              while i < len(lines):
-                  line = lines[i]
-                  if i+1 < len(lines):
-                      next_line = lines[i+1]
-                      bonus_match = re.match(r'^([+-][\d.]+%)\s+(.+)$', next_line)
-                      if bonus_match:
-                          dungeon = line.strip("*_")
-                          value   = bonus_match.group(1)
-                          btype_raw = bonus_match.group(2).lower().strip()
-                          btype = next((v for k,v in bonus_types.items() if k in btype_raw), "unknown")
-                          week_bonuses[dungeon] = {
-                              "value": value,
-                              "type": btype,
-                              "label": bonus_match.group(2)
-                          }
-                          i += 2; continue
-                  i += 1
-
-              if week_bonuses:
-                  bonuses[week_key] = week_bonuses
-                  new_entries += 1
-                  print(f"Added {len(week_bonuses)} bonuses for week {week_key}")
+              bonuses[week_key] = row
+              new_entries += 1
+              print(f"Added week {week_key}")
 
           if new_entries == 0:
-              print("No new bonus entries found")
+              print("No new weeks to add")
               now = datetime.utcnow()
-              current_week = get_week_key(now)
-              if current_week not in bonuses:
-                  print(f"Current week {current_week} still missing — will retry")
+              if get_week_key(now) not in bonuses:
+                  print("Current week still missing — retrying")
                   sys.exit(1)
-
-          with open(bonuses_path, "w") as f:
-              json.dump(bonuses, f, indent=2, ensure_ascii=False)
-          print(f"Saved bonuses.json with {len(bonuses)} weeks")
+          else:
+              with open(bonuses_path, "w") as f:
+                  json.dump(bonuses, f, indent=2, ensure_ascii=False)
+              print(f"Saved {len(bonuses)} weeks to bonuses.json")
           PYEOF
 
       - name: Commit bonuses
