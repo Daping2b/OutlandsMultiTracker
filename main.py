@@ -1490,13 +1490,7 @@ class App(ctk.CTk):
         right.grid(row=0,column=1,sticky="nsew")
 
         frow=ctk.CTkFrame(right,fg_color=BG3,height=48,corner_radius=0); frow.pack(fill="x")
-        def _apply_with_flag():
-            self._dates_manually_set = True
-            self._refresh()
-        def _alltime_with_flag():
-            self._dates_manually_set = False
-            self._all_time_log()
-        self._get_from, self._get_to = date_row(frow, _apply_with_flag, _alltime_with_flag)
+        self._get_from, self._get_to = date_row(frow, self._refresh, self._all_time_log)
         dim_btn(frow,"🗑 Delete",self._delete_selected,w=95).pack(side="right",padx=2)
         dim_btn(frow,"📤 Upload Guild",self._upload_selected_to_guild,w=130).pack(side="right",padx=2)
         dim_btn(frow,"Export CSV",self._bulk_csv,w=105).pack(side="right",padx=2)
@@ -1619,22 +1613,20 @@ class App(ctk.CTk):
         sel=self._act_tv.selection()
         if not sel: return
         self._act_f=sel[0]
-        # Reset to All Time if no date was manually selected
-        if not getattr(self, "_dates_manually_set", False):
-            self._from_var.set("")
-            self._to_var.set("")
         self._refresh()
 
 
     def _filtered(self,ignore_dates=False):
         ss=list(self.sessions); f=self._act_f
-        if   f=="Boating":      ss=[s for s in ss if "Boating"  in s.get("type","")]
-        elif f=="Harvesting":   ss=[s for s in ss if "Harvest"  in s.get("type","")]
-        elif f.startswith("dl_"): nm=f[3:];   ss=[s for s in ss if s.get("location","")==nm]
-        elif f.startswith("db_"): base=f[3:]; ss=[s for s in ss if re.sub(r'\s+Lv-\d+$','',s.get("location","")).strip()==base]
-        elif f=="Dungeon":      ss=[s for s in ss if "Creature Farming" in s.get("type","") or s.get("location")]
-        elif f=="wild_global":  ss=[s for s in ss if not s.get("location") and "Boating" not in s.get("type","") and "Harvest" not in s.get("type","")]
-        elif f=="Wilderness":   ss=[s for s in ss if not s.get("location") and "Boating" not in s.get("type","") and "Harvest" not in s.get("type","")]
+        def _loc(s): return s.get("location") or ""
+        def _typ(s): return s.get("type") or ""
+        if   f=="Boating":      ss=[s for s in ss if "Boating"  in _typ(s)]
+        elif f=="Harvesting":   ss=[s for s in ss if "Harvest"  in _typ(s)]
+        elif f.startswith("dl_"): nm=f[3:];   ss=[s for s in ss if _loc(s)==nm]
+        elif f.startswith("db_"): base=f[3:]; ss=[s for s in ss if re.sub(r'\s+Lv-\d+$','',_loc(s)).strip()==base]
+        elif f=="Dungeon":      ss=[s for s in ss if "Creature Farming" in _typ(s) or _loc(s)]
+        elif f=="wild_global":  ss=[s for s in ss if not _loc(s) and "Boating" not in _typ(s) and "Harvest" not in _typ(s)]
+        elif f=="Wilderness":   ss=[s for s in ss if not _loc(s) and "Boating" not in _typ(s) and "Harvest" not in _typ(s)]
         if self._char_f!="All": ss=[s for s in ss if s.get("player","")==self._char_f]
         if not ignore_dates:
             try:
@@ -2787,8 +2779,8 @@ class App(ctk.CTk):
                     _render_grade_system()
                 gs_hdr.bind("<Button-1>", lambda e: _toggle_gs())
                 if not gs_state["open"]: return
-                # Inner scroll for grades
-                gf_inner = ctk.CTkScrollableFrame(gs_wrap, fg_color="transparent", height=280)
+                # Plain frame — no scroll, grades display fully
+                gf_inner = ctk.CTkFrame(gs_wrap, fg_color="transparent")
                 gf_inner.pack(fill="x", padx=4, pady=(2,4))
                 for ge in grades_state:
                     gk = ge["key"]
