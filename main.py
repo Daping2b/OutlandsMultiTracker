@@ -1490,7 +1490,13 @@ class App(ctk.CTk):
         right.grid(row=0,column=1,sticky="nsew")
 
         frow=ctk.CTkFrame(right,fg_color=BG3,height=48,corner_radius=0); frow.pack(fill="x")
-        self._get_from,self._get_to=date_row(frow,self._refresh,self._all_time_log)
+        def _apply_with_flag():
+            self._dates_manually_set = True
+            self._refresh()
+        def _alltime_with_flag():
+            self._dates_manually_set = False
+            self._all_time_log()
+        self._get_from, self._get_to = date_row(frow, _apply_with_flag, _alltime_with_flag)
         dim_btn(frow,"🗑 Delete",self._delete_selected,w=95).pack(side="right",padx=2)
         dim_btn(frow,"📤 Upload Guild",self._upload_selected_to_guild,w=130).pack(side="right",padx=2)
         dim_btn(frow,"Export CSV",self._bulk_csv,w=105).pack(side="right",padx=2)
@@ -1611,7 +1617,13 @@ class App(ctk.CTk):
 
     def _on_act(self,_):
         sel=self._act_tv.selection()
-        if sel: self._act_f=sel[0]; self._refresh()
+        if not sel: return
+        self._act_f=sel[0]
+        # Reset to All Time if no date was manually selected
+        if not getattr(self, "_dates_manually_set", False):
+            self._from_var.set("")
+            self._to_var.set("")
+        self._refresh()
 
 
     def _filtered(self,ignore_dates=False):
@@ -2716,12 +2728,11 @@ class App(ctk.CTk):
         self._guild_content_loading("  \U0001f451  Guild Admin")
         import threading
         all_roles      = []
-        mappings_state = {}   # grade_key → [{id, name}]
-        grades_state   = []   # [{key, name}]  — ordered list of grades
+        mappings_state = {}
+        grades_state   = []
 
         def _load():
             try:
-                # Use cache if available — invalidated on save
                 if guild_id in self._guild_cache:
                     g = self._guild_cache[guild_id]
                 else:
@@ -2737,8 +2748,7 @@ class App(ctk.CTk):
                     mappings_state[gk] = []
                 for rm in g.get("role_mappings", []):
                     gk = rm["omt_grade"]
-                    if gk not in mappings_state:
-                        mappings_state[gk] = []
+                    if gk not in mappings_state: mappings_state[gk] = []
                     mappings_state[gk].append({"id": rm["discord_role_id"], "name": rm["discord_role_name"]})
                 self.after(0, lambda gd=g: _render(gd))
             except RuntimeError as e:
@@ -2749,101 +2759,89 @@ class App(ctk.CTk):
 
         def _render(g):
             for w in self._guild_content.winfo_children(): w.destroy()
+            # ── Title ────────────────────────────────────────────────────────
             ctk.CTkLabel(self._guild_content, text="  \U0001f451  Guild Admin",
                          font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(12,4))
             ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,8))
 
-            # ── Grades section — "Grade System" parent accordion ────────────
-            # Parent accordion container
-            gs_outer = ctk.CTkFrame(self._guild_content, fg_color="transparent")
-            gs_outer.pack(fill="both", expand=True, padx=16, pady=(0,4))
-            gs_outer._open = True
-
-            def _render_grade_system():
-                for w in gs_outer.winfo_children(): w.destroy()
-                is_open = getattr(gs_outer, "_open", True)
-                # Parent header
-                gs_hdr = ctk.CTkFrame(gs_outer, fg_color=BG3, corner_radius=6)
-                gs_hdr.pack(fill="x")
-                arrow = "▼" if is_open else "▶"
-                ctk.CTkLabel(gs_hdr, text=f"  {arrow}  Grade System",
-                             font=F_BODY_B, text_color=GOLD_LT, anchor="w").pack(side="left", padx=10, pady=8)
-                def _toggle_gs():
-                    gs_outer._open = not getattr(gs_outer, "_open", True)
-                    _render_grade_system()
-                gs_hdr.bind("<Button-1>", lambda e: _toggle_gs())
-
-                if not is_open: return
-
-                # Inner grades frame
-                grades_frame_inner = ctk.CTkScrollableFrame(gs_outer, fg_color="transparent", height=280)
-                grades_frame_inner.pack(fill="x", padx=4, pady=(0,4))
-
-                for ge in grades_state:
-                    gk = ge["key"]
-                    gf = ctk.CTkFrame(grades_frame_inner, fg_color="transparent")
-                    gf.pack(fill="x", pady=2, padx=2)
-                    gf._open = True
-                    accordion_frames[gk] = gf
-                    _render_accordion(ge)
-
-                def _add_grade():
-                    import secrets as _sec
-                    new_key  = "grade_" + _sec.token_hex(4)
-                    new_name = f"Grade {len(grades_state)+1}"
-                    grades_state.append({"key": new_key, "name": new_name})
-                    mappings_state[new_key] = []
-                    _render_grade_system()
-                dim_btn(grades_frame_inner, "+ Add Grade", _add_grade, w=130, h=30).pack(
-                    anchor="w", padx=4, pady=6)
+            # ── Scrollable area for all accordions ───────────────────────────
+            scroll = ctk.CTkScrollableFrame(self._guild_content, fg_color="transparent")
+            scroll.pack(fill="both", expand=True, padx=16, pady=(0,0))
 
             accordion_frames = {}
 
-            def _render_accordion(grade_entry):
-                gk   = grade_entry["key"]
-                gname= grade_entry["name"]
-                outer= accordion_frames.get(gk)
+            # ══ GRADE SYSTEM accordion ════════════════════════════════════════
+            gs_state = {"open": True}
+            gs_wrap  = ctk.CTkFrame(scroll, fg_color="transparent")
+            gs_wrap.pack(fill="x", pady=(0,4))
+
+            def _render_grade_system():
+                for w in gs_wrap.winfo_children(): w.destroy()
+                arrow = "\u25bc" if gs_state["open"] else "\u25b6"
+                gs_hdr = ctk.CTkFrame(gs_wrap, fg_color=BG3, corner_radius=6)
+                gs_hdr.pack(fill="x")
+                ctk.CTkLabel(gs_hdr, text=f"  {arrow}  Grade System",
+                             font=F_BODY_B, text_color=GOLD_LT, anchor="w").pack(side="left", padx=10, pady=8)
+                def _toggle_gs():
+                    gs_state["open"] = not gs_state["open"]
+                    _render_grade_system()
+                gs_hdr.bind("<Button-1>", lambda e: _toggle_gs())
+                if not gs_state["open"]: return
+                # Inner scroll for grades
+                gf_inner = ctk.CTkScrollableFrame(gs_wrap, fg_color="transparent", height=280)
+                gf_inner.pack(fill="x", padx=4, pady=(2,4))
+                for ge in grades_state:
+                    gk = ge["key"]
+                    gf = ctk.CTkFrame(gf_inner, fg_color="transparent")
+                    gf.pack(fill="x", pady=2)
+                    accordion_frames[gk] = gf
+                    accordion_frames[gk]._open = True
+                    _render_accordion(ge)
+                def _add_grade():
+                    import secrets as _sec
+                    nk = "grade_" + _sec.token_hex(4)
+                    grades_state.append({"key": nk, "name": f"Grade {len(grades_state)+1}"})
+                    mappings_state[nk] = []
+                    _render_grade_system()
+                dim_btn(gf_inner, "+ Add Grade", _add_grade, w=130, h=30).pack(anchor="w", padx=4, pady=4)
+
+            def _render_accordion(ge):
+                gk    = ge["key"]
+                gname = ge["name"]
+                outer = accordion_frames.get(gk)
                 if not outer: return
                 for w in outer.winfo_children(): w.destroy()
-                # Header row (click to toggle)
                 is_open = getattr(outer, "_open", True)
+                arrow   = "\u25bc" if is_open else "\u25b6"
                 hdr_row = ctk.CTkFrame(outer, fg_color=BG3, corner_radius=4)
                 hdr_row.pack(fill="x")
-                arrow = "\u25bc" if is_open else "\u25b6"
                 ctk.CTkLabel(hdr_row, text=f"  {arrow}  {gname}",
                              font=F_BODY_B, text_color=GOLD, anchor="w").pack(side="left", padx=8, pady=6)
-                # Name edit
                 name_var = tk.StringVar(value=gname)
-                name_entry = ctk.CTkEntry(hdr_row, textvariable=name_var,
-                                          width=140, height=26, font=F_SMALL,
-                                          fg_color=BG4, border_color=BORDER,
-                                          text_color=TEXT)
-                name_entry.pack(side="left", padx=4)
-                def _save_name(gk2=gk, var=name_var, ge=grade_entry):
-                    ge["name"] = var.get()
+                ctk.CTkEntry(hdr_row, textvariable=name_var, width=140, height=26,
+                             font=F_SMALL, fg_color=BG4, border_color=BORDER,
+                             text_color=TEXT).pack(side="left", padx=4)
+                def _save_name(gk2=gk, var=name_var, ge2=ge):
+                    ge2["name"] = var.get()
                 ctk.CTkButton(hdr_row, text="\u2713", width=26, height=26,
                               fg_color=BG4, hover_color=GOLD_DK, text_color=GOLD,
-                              font=F_SMALL, corner_radius=4,
-                              command=_save_name).pack(side="left", padx=2)
-                # Delete grade button (not for leader)
+                              font=F_SMALL, corner_radius=4, command=_save_name).pack(side="left", padx=2)
                 if gk != "leader":
-                    def _del_grade(gk2=gk, ge=grade_entry):
-                        grades_state.remove(ge)
+                    def _del_grade(gk2=gk, ge2=ge):
+                        grades_state.remove(ge2)
                         mappings_state.pop(gk2, None)
-                        accordion_frames[gk2].destroy()
+                        if gk2 in accordion_frames: accordion_frames[gk2].destroy()
+                        _render_grade_system()
                     ctk.CTkButton(hdr_row, text="\u00d7", width=26, height=26,
                                   fg_color="transparent", hover_color=RED, text_color=RED,
                                   font=F_BODY_B, corner_radius=4,
                                   command=_del_grade).pack(side="right", padx=4)
-                # Toggle
-                def _toggle(outer2=outer, ge2=grade_entry):
-                    outer2._open = not getattr(outer2, "_open", True)
+                def _toggle(o=outer, ge2=ge):
+                    o._open = not getattr(o, "_open", True)
                     _render_accordion(ge2)
-                hdr_row.bind("<Button-1>", lambda e, o=outer, ge=grade_entry: _toggle(o, ge))
-
+                hdr_row.bind("<Button-1>", lambda e, o=outer, ge2=ge: _toggle(o, ge2))
                 if not is_open: return
-                # Body: roles
-                body_f = ctk.CTkFrame(outer, fg_color=BG2, corner_radius=0)
+                body_f    = ctk.CTkFrame(outer, fg_color=BG2, corner_radius=0)
                 body_f.pack(fill="x", padx=2, pady=(0,2))
                 roles_row = ctk.CTkFrame(body_f, fg_color="transparent")
                 roles_row.pack(fill="x", padx=8, pady=4)
@@ -2855,110 +2853,100 @@ class App(ctk.CTk):
                     ctk.CTkButton(tag, text="\u00d7", width=18, height=18,
                                   fg_color="transparent", text_color=DIM2, hover_color=RED,
                                   font=F_SMALL,
-                                  command=lambda r=role, gk2=gk, ge=grade_entry: [
-                                      mappings_state[gk2].remove(r), _render_accordion(ge)
+                                  command=lambda r=role, gk2=gk, ge2=ge: [
+                                      mappings_state[gk2].remove(r), _render_accordion(ge2)
                                   ]).pack(side="left", padx=(0,2))
-                # + Add role
-                def _add_role(gk2=gk, ge=grade_entry):
+                def _add_role(gk2=gk, ge2=ge):
                     if not all_roles:
                         messagebox.showinfo("Info", "Invite the bot first to load roles.")
                         return
-                    popup = ctk.CTkToplevel(self)
-                    popup.title("Add Role"); popup.geometry("280x340")
-                    popup.configure(fg_color=BG); popup.grab_set()
+                    popup = ctk.CTkToplevel(self); popup.title("Add Role")
+                    popup.geometry("280x340"); popup.configure(fg_color=BG); popup.grab_set()
                     self._set_win_icon(popup)
                     sf = ctk.CTkScrollableFrame(popup, fg_color=BG2, height=280)
                     sf.pack(fill="both", expand=True, padx=8, pady=8)
                     used = {r["id"] for roles in mappings_state.values() for r in roles}
                     for role in all_roles:
                         if role["id"] in used: continue
-                        def _pick(r=role, gk3=gk2, ge2=ge):
+                        def _pick(r=role, gk3=gk2, ge3=ge2):
                             if gk3 not in mappings_state: mappings_state[gk3] = []
                             mappings_state[gk3].append(r)
-                            _render_accordion(ge2); popup.destroy()
+                            _render_accordion(ge3); popup.destroy()
                         ctk.CTkButton(sf, text=role["name"], anchor="w",
                                       fg_color=BG3, hover_color=BG4, text_color=TEXT,
                                       font=F_BODY, height=32, command=_pick).pack(fill="x", padx=4, pady=2)
                 ctk.CTkButton(body_f, text="+ Add Role", anchor="w",
                               fg_color="transparent", text_color=GOLD, hover_color=BG3,
-                              font=F_SMALL, height=28,
-                              command=_add_role).pack(anchor="w", padx=10, pady=(0,4))
+                              font=F_SMALL, height=28, command=_add_role).pack(anchor="w", padx=10, pady=(0,4))
 
-            # Build Grade System
             _render_grade_system()
 
-            # ── Sessions admin section — accordion ───────────────────────────────
-            sess_outer = ctk.CTkFrame(self._guild_content, fg_color="transparent")
-            sess_outer.pack(fill="x", padx=16, pady=(4,4))
-            sess_outer._open = False
+            # ══ SESSIONS accordion ════════════════════════════════════════════
+            sess_state = {"open": False}
+            sess_wrap  = ctk.CTkFrame(scroll, fg_color="transparent")
+            sess_wrap.pack(fill="x", pady=(4,4))
 
-            def _render_session_system():
-                for w in sess_outer.winfo_children(): w.destroy()
-                is_open = getattr(sess_outer, "_open", False)
-                arrow   = "▼" if is_open else "▶"
-                sess_hdr = ctk.CTkFrame(sess_outer, fg_color=BG3, corner_radius=6)
+            def _render_session_accordion():
+                for w in sess_wrap.winfo_children(): w.destroy()
+                arrow    = "\u25bc" if sess_state["open"] else "\u25b6"
+                sess_hdr = ctk.CTkFrame(sess_wrap, fg_color=BG3, corner_radius=6)
                 sess_hdr.pack(fill="x")
                 ctk.CTkLabel(sess_hdr, text=f"  {arrow}  Sessions",
                              font=F_BODY_B, text_color=GOLD, anchor="w").pack(side="left", padx=10, pady=8)
                 def _toggle_sess():
-                    sess_outer._open = not getattr(sess_outer, "_open", False)
-                    _render_session_system()
+                    sess_state["open"] = not sess_state["open"]
+                    _render_session_accordion()
                 sess_hdr.bind("<Button-1>", lambda e: _toggle_sess())
-                if not is_open: return
-                sess_body = ctk.CTkFrame(sess_outer, fg_color=BG2, corner_radius=0)
+                if not sess_state["open"]: return
+                sess_body = ctk.CTkFrame(sess_wrap, fg_color=BG2, corner_radius=0)
                 sess_body.pack(fill="x", padx=2, pady=(0,2))
-            _render_session_system()
+                ctk.CTkLabel(sess_body, text="Delete all sessions from user:",
+                             font=F_SMALL, text_color=DIM, anchor="w").pack(anchor="w", padx=10, pady=(8,4))
+                members_list = [m["username"] for m in g.get("members", [])]
+                members_map  = {m["username"]: m["user_id"] for m in g.get("members", [])}
+                del_var = tk.StringVar(value=members_list[0] if members_list else "")
+                del_row = ctk.CTkFrame(sess_body, fg_color="transparent")
+                del_row.pack(fill="x", padx=10, pady=(0,8))
+                ctk.CTkOptionMenu(del_row, values=members_list or ["—"],
+                                  variable=del_var, fg_color=BG4,
+                                  button_color=GOLD_DK, text_color=TEXT,
+                                  font=F_SMALL, width=200).pack(side="left", padx=(0,8))
+                def _del_user_sessions():
+                    uname = del_var.get()
+                    uid   = members_map.get(uname)
+                    if not uid: return
+                    if not messagebox.askyesno("Delete Sessions",
+                        f"Delete ALL sessions from {uname}?\nThis cannot be undone."): return
+                    def _do():
+                        try:
+                            self._guild_api("DELETE", f"/guild/{guild_id}/sessions/user/{uid}",
+                                            params={"token": self._guild_session_token})
+                            if hasattr(self, "_members_cache"):
+                                self._members_cache.pop(guild_id, None)
+                            self.after(0, lambda: messagebox.showinfo("Done",
+                                f"Sessions from {uname} deleted."))
+                        except RuntimeError as e:
+                            err_msg = str(e)
+                            self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                    threading.Thread(target=_do, daemon=True).start()
+                ctk.CTkButton(del_row, text="\U0001f5d1 Delete Sessions",
+                              width=140, height=30, fg_color="#8b0000",
+                              hover_color=RED, text_color="white",
+                              font=F_SMALL, corner_radius=4,
+                              command=_del_user_sessions).pack(side="left")
 
-            def _get_sess_body():
-                for w in sess_outer.winfo_children():
-                    if hasattr(w, 'winfo_children'):
-                        for c in w.winfo_children():
-                            if isinstance(c, ctk.CTkFrame) and c != w.winfo_children()[0]:
-                                return c
-                return None
+            _render_session_accordion()
 
-            ctk.CTkLabel(sess_body, text="Delete all sessions from user:",
-                         font=F_SMALL, text_color=DIM, anchor="w").pack(anchor="w", padx=10, pady=(6,4))
-            # Load member list for dropdown
-            members_for_del = [m["username"] for m in g.get("members",[])]
-            members_ids_map  = {m["username"]: m["user_id"] for m in g.get("members",[])}
-            del_user_var = tk.StringVar(value=members_for_del[0] if members_for_del else "")
-            del_row = ctk.CTkFrame(sess_body, fg_color="transparent"); del_row.pack(fill="x")
-            ctk.CTkOptionMenu(del_row, values=members_for_del, variable=del_user_var,
-                              fg_color=BG4, button_color=GOLD_DK,
-                              text_color=TEXT, font=F_SMALL, width=200).pack(side="left", padx=(0,8))
-            def _del_user_sessions():
-                uname = del_user_var.get()
-                uid   = members_ids_map.get(uname)
-                if not uid: return
-                if not messagebox.askyesno("Delete Sessions",
-                    f"Delete ALL sessions from {uname}?\nThis cannot be undone."): return
-                def _do():
-                    try:
-                        self._guild_api("DELETE", f"/guild/{guild_id}/sessions/user/{uid}",
-                                        params={"token": self._guild_session_token})
-                        if hasattr(self, "_members_cache"): self._members_cache.pop(guild_id, None)
-                        self.after(0, lambda: messagebox.showinfo("Done", f"Sessions from {uname} deleted."))
-                    except RuntimeError as e:
-                        err_msg = str(e)
-                        self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
-                import threading
-                threading.Thread(target=_do, daemon=True).start()
-            ctk.CTkButton(del_row, text="🗑 Delete Sessions", width=140, height=30,
-                          fg_color="#8b0000", hover_color=RED, text_color="white",
-                          font=F_SMALL, corner_radius=4,
-                          command=_del_user_sessions).pack(side="left")
-
-            # ── Bottom bar: Save + Delete ────────────────────────────────────
+            # ── Bottom bar: Save + Delete ─────────────────────────────────────
             bot_bar = ctk.CTkFrame(self._guild_content, fg_color=BG2, height=52, corner_radius=0)
             bot_bar.pack(fill="x", side="bottom"); bot_bar.pack_propagate(False)
             ctk.CTkFrame(bot_bar, fg_color=BORDER, height=1).place(relx=0, rely=0, relwidth=1.0)
 
             def _save_all():
-                self._guild_cache.pop(guild_id, None)  # invalidate cache
-                flat = [{"discord_role_id": r["id"], "discord_role_name": r["name"],
-                         "omt_grade": gk}
-                        for gk, roles in mappings_state.items() for r in roles]
+                self._guild_cache.pop(guild_id, None)
+                flat   = [{"discord_role_id": r["id"], "discord_role_name": r["name"],
+                           "omt_grade": gk}
+                          for gk, roles in mappings_state.items() for r in roles]
                 gnames = {ge["key"]: ge["name"] for ge in grades_state}
                 gorder = [ge["key"] for ge in grades_state]
                 def _do():
@@ -2973,13 +2961,13 @@ class App(ctk.CTk):
                         err_msg = str(e)
                         self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
                 threading.Thread(target=_do, daemon=True).start()
-            gold_btn(bot_bar, "\U0001f4be  Save", _save_all, w=120, h=36).pack(
-                side="left", padx=12, pady=8)
+            gold_btn(bot_bar, "\U0001f4be  Save", _save_all, w=120, h=36).pack(side="left", padx=12, pady=8)
 
             def _delete_guild():
                 win2 = ctk.CTkToplevel(self)
                 win2.title("Delete Guild"); win2.geometry("420x220")
                 win2.configure(fg_color=BG); win2.grab_set()
+                win2.protocol("WM_DELETE_WINDOW", win2.destroy)
                 self._set_win_icon(win2)
                 ctk.CTkLabel(win2, text="\u26a0\ufe0f  Delete Guild",
                              font=F_HEAD, text_color=RED).pack(pady=(16,8))
@@ -3014,6 +3002,7 @@ class App(ctk.CTk):
                           command=_delete_guild).pack(side="right", padx=12, pady=8)
 
         threading.Thread(target=_load, daemon=True).start()
+
     # ── My Profile ────────────────────────────────────────────────────────────
     def _guild_show_profile(self):
         for w in self._guild_content.winfo_children(): w.destroy()
