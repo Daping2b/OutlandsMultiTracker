@@ -1613,7 +1613,9 @@ class App(ctk.CTk):
         sel=self._act_tv.selection()
         if not sel: return
         self._act_f=sel[0]
-        self._refresh()
+        # If no dates entered, stay in All Time
+        has_dates = bool(self._get_from() or self._get_to())
+        self._refresh(ignore_dates=not has_dates)
 
 
     def _filtered(self,ignore_dates=False):
@@ -2763,7 +2765,7 @@ class App(ctk.CTk):
             accordion_frames = {}
 
             # ══ GRADE SYSTEM accordion ════════════════════════════════════════
-            gs_state = {"open": True}
+            gs_state = {"open": False}
             gs_wrap  = ctk.CTkFrame(scroll, fg_color="transparent")
             gs_wrap.pack(fill="x", pady=(0,4))
 
@@ -2803,7 +2805,8 @@ class App(ctk.CTk):
                 outer = accordion_frames.get(gk)
                 if not outer: return
                 for w in outer.winfo_children(): w.destroy()
-                is_open = getattr(outer, "_open", True)
+                # Default closed
+                is_open = getattr(outer, "_open", False)
                 arrow   = "\u25bc" if is_open else "\u25b6"
                 hdr_row = ctk.CTkFrame(outer, fg_color=BG3, corner_radius=4)
                 hdr_row.pack(fill="x")
@@ -2829,25 +2832,28 @@ class App(ctk.CTk):
                                   font=F_BODY_B, corner_radius=4,
                                   command=_del_grade).pack(side="right", padx=4)
                 def _toggle(o=outer, ge2=ge):
-                    o._open = not getattr(o, "_open", True)
+                    o._open = not getattr(o, "_open", False)
                     _render_accordion(ge2)
                 hdr_row.bind("<Button-1>", lambda e, o=outer, ge2=ge: _toggle(o, ge2))
                 if not is_open: return
-                body_f    = ctk.CTkFrame(outer, fg_color=BG2, corner_radius=0)
+                # Body only shown when open
+                body_f = ctk.CTkFrame(outer, fg_color=BG2, corner_radius=0)
                 body_f.pack(fill="x", padx=2, pady=(0,2))
-                roles_row = ctk.CTkFrame(body_f, fg_color="transparent")
-                roles_row.pack(fill="x", padx=8, pady=4)
-                for role in mappings_state.get(gk, []):
-                    tag = ctk.CTkFrame(roles_row, fg_color=BG4, corner_radius=4)
-                    tag.pack(side="left", padx=2)
-                    ctk.CTkLabel(tag, text=role["name"], font=F_SMALL,
-                                 text_color=TEXT).pack(side="left", padx=(6,2))
-                    ctk.CTkButton(tag, text="\u00d7", width=18, height=18,
-                                  fg_color="transparent", text_color=DIM2, hover_color=RED,
-                                  font=F_SMALL,
-                                  command=lambda r=role, gk2=gk, ge2=ge: [
-                                      mappings_state[gk2].remove(r), _render_accordion(ge2)
-                                  ]).pack(side="left", padx=(0,2))
+                roles = mappings_state.get(gk, [])
+                if roles:
+                    roles_row = ctk.CTkFrame(body_f, fg_color="transparent")
+                    roles_row.pack(fill="x", padx=8, pady=(6,2))
+                    for role in roles:
+                        tag = ctk.CTkFrame(roles_row, fg_color=BG4, corner_radius=4)
+                        tag.pack(side="left", padx=2)
+                        ctk.CTkLabel(tag, text=role["name"], font=F_SMALL,
+                                     text_color=TEXT).pack(side="left", padx=(6,2))
+                        ctk.CTkButton(tag, text="\u00d7", width=18, height=18,
+                                      fg_color="transparent", text_color=DIM2, hover_color=RED,
+                                      font=F_SMALL,
+                                      command=lambda r=role, gk2=gk, ge2=ge: [
+                                          mappings_state[gk2].remove(r), _render_accordion(ge2)
+                                      ]).pack(side="left", padx=(0,2))
                 def _add_role(gk2=gk, ge2=ge):
                     if not all_roles:
                         messagebox.showinfo("Info", "Invite the bot first to load roles.")
