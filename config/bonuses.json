@@ -37,9 +37,12 @@
     }
   },
   "2026-06-13": {
-    "id": 1,
-    "Bonus": "Sanctuary Dungeon",
-    "Location": "Inferno",
-    "LastUpdated": "2026-06-13T00:00:21.511+00:00"
-  }
+  "Inferno": {"value": "", "type": "sanctuary", "label": "Sanctuary Dungeon"},
+  "Shadowspire Cathedral": {"value": "", "type": "challenger", "label": "Challenger Dungeon"},
+  "Tidal Tomb": {"value": "+25%", "type": "respawn", "label": "Faster Respawn"},
+  "Mount Petram": {"value": "+15%", "type": "gold_loot", "label": "Gold Loot"},
+  "Cavernam": {"value": "+20%", "type": "experience", "label": "Experience"},
+  "Outpost": {"value": "+10%", "type": "vendor", "label": "Vendor Rebate"},
+  "Terran": {"value": "+15%", "type": "crafting", "label": "Exceptional Crafting"}
+}
 }
