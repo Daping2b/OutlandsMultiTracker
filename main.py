@@ -1199,11 +1199,17 @@ class App(ctk.CTk):
         ico_path = str(ASSETS_DIR / "O-MTSmall.ico")
         try:
             self.iconbitmap(ico_path)
+            self._main_icon_path = ico_path
+            # Re-apply after window is fully drawn
+            self.after(500, lambda: self.iconbitmap(ico_path))
         except Exception:
             ico_pil = load_pil("O-MTSmall_128x128.png", (64,64), transparent=True)
             if ico_pil:
-                ph=ImageTk.PhotoImage(ico_pil); self._keep(ph)
+                ph = ImageTk.PhotoImage(ico_pil)
+                self._keep(ph)
+                self._main_icon_ph = ph  # persist reference
                 self.iconphoto(True, ph)
+                self.after(500, lambda: self.iconphoto(True, ph))
 
         # ── Nav bar (black background to match O-MTMedium) ────────────────────
         nav=ctk.CTkFrame(self, fg_color=NAV_BG, height=60, corner_radius=0)
@@ -1271,6 +1277,9 @@ class App(ctk.CTk):
             if name in builders:
                 builders[name]()
                 self._built_pages.add(name)
+        elif name == "Guild" and hasattr(self, '_guild_page'):
+            # Already built — re-render to pick up new token/state
+            self._guild_render()
         for n,f in self._pages.items():
             f.pack_forget()
             btn=self._tb.get(n)
@@ -2312,6 +2321,8 @@ class App(ctk.CTk):
     # ═══════════════════════════════════════════════════════════════════════════
     # ── Guild API helper ───────────────────────────────────────────────────────
     GUILD_API = "http://localhost:8765"
+    _guild_cache:   dict = {}  # class-level cache — per instance via _build_guild
+    _members_cache: dict = {}  # class-level members cache
 
     def _guild_api(self, method: str, path: str, params: dict = None, body: dict = None) -> dict:
         """Make a request to the Guild API. Returns dict or raises."""
@@ -2336,12 +2347,13 @@ class App(ctk.CTk):
             raise RuntimeError(str(e))
 
     def _build_guild(self):
+        if not hasattr(self, "_guild_cache"): self._guild_cache = {}
+        if not hasattr(self, "_members_cache"): self._members_cache = {}
         page = ctk.CTkFrame(self._body, fg_color=BG, corner_radius=0)
         self._pages["Guild"] = page
         self._guild_session_token = self._load_guild_token()
         self._guild_page = page
         self._guild_render()
-
     def _load_guild_token(self) -> str | None:
         """Load persisted session token from settings."""
         return self.settings.get("guild_token")
@@ -2355,25 +2367,36 @@ class App(ctk.CTk):
         save_json(SETTINGS_F, self.settings)
 
     def _guild_render(self):
-        """Render the appropriate Guild state into self._guild_page."""
+        """Render Guild state — async token check to avoid blocking main thread."""
+        import threading
         for w in self._guild_page.winfo_children(): w.destroy()
         if not self._guild_session_token:
             self._guild_state_login()
-        else:
-            # Verify token and get user
+            return
+        # Show loading indicator while verifying token
+        loading = ctk.CTkLabel(self._guild_page, text="Loading...",
+                               text_color=DIM2, font=F_BODY)
+        loading.pack(expand=True)
+        def _check():
             try:
                 me = self._guild_api("GET", "/auth/me",
                                      params={"token": self._guild_session_token})
-                self._guild_me = me
-                if me.get("memberships"):
-                    self._guild_state_guild(me)
-                else:
-                    self._guild_state_profile(me)
+                self.after(0, lambda: _render(me))
             except RuntimeError:
-                # Token expired or invalid
                 self._guild_session_token = None
                 self._save_guild_token(None)
-                self._guild_state_login()
+                self.after(0, _on_token_invalid)
+        def _on_token_invalid():
+            for w in self._guild_page.winfo_children(): w.destroy()
+            self._guild_state_login()
+        def _render(me):
+            for w in self._guild_page.winfo_children(): w.destroy()
+            self._guild_me = me
+            if me.get("memberships"):
+                self._guild_state_guild(me)
+            else:
+                self._guild_state_profile(me)
+        threading.Thread(target=_check, daemon=True).start()
 
     # ── State 1: Login ────────────────────────────────────────────────────────
     def _guild_state_login(self):
@@ -2398,136 +2421,34 @@ class App(ctk.CTk):
         self._guild_status_lbl = ctk.CTkLabel(p, text="", text_color=DIM2, font=F_SMALL)
         self._guild_status_lbl.pack(pady=8)
 
-    def _guild_do_login(self):
-        """Open Discord OAuth2 in browser, capture callback via localhost server."""
-        import threading, webbrowser
-        try:
-            resp = self._guild_api("GET", "/auth/url")
-            url  = resp["url"]
-        except RuntimeError as e:
-            messagebox.showerror("Error",
-                f"Cannot reach Guild API.\nMake sure the backend is running.\n\n{e}")
-            return
-        self._guild_status_lbl.configure(text="Waiting for Discord login...")
-        # Start local callback server then open browser
-        threading.Thread(target=self._guild_oauth_server,
-                         args=(url,), daemon=True).start()
-
-    def _guild_oauth_server(self, oauth_url: str):
-        """Spin up a temporary localhost HTTP server to catch the OAuth2 callback."""
-        import http.server, urllib.parse, webbrowser, threading
-
-        result = {"code": None, "state": None, "error": None}
-        server_ready = threading.Event()
-
-        class CallbackHandler(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *args): pass
-
-            def do_GET(self):
-                parsed = urllib.parse.urlparse(self.path)
-                params = urllib.parse.parse_qs(parsed.query)
-                if "code" in params:
-                    result["code"]  = params["code"][0]
-                    result["state"] = params.get("state", [None])[0]
-                    html = self._success_html()
-                elif "error" in params:
-                    result["error"] = params["error"][0]
-                    html = self._error_html(params["error"][0])
-                else:
-                    html = b"<html><body>Unexpected request.</body></html>"
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(html)
-                threading.Thread(target=self.server.shutdown, daemon=True).start()
-
-            def _success_html(self):
-                return b"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>body{background:#080808;color:#e8dcc8;font-family:'Segoe UI',sans-serif;
-display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
-.box{background:#111;border:1px solid #c8952a;border-radius:10px;padding:40px 60px;text-align:center;}
-h2{color:#c8952a;} p{color:#aa9980;}</style></head>
-<body><div class="box"><div style="font-size:48px">&#10022;</div>
-<h2>Connected!</h2><p>You can close this tab.<br>OMT will update automatically.</p>
-</div></body></html>"""
-
-            def _error_html(self, err):
-                return (f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>body{{background:#080808;color:#e8dcc8;font-family:'Segoe UI',sans-serif;
-display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
-.box{{background:#111;border:1px solid #cc3333;border-radius:10px;padding:40px 60px;text-align:center;}}
-h2{{color:#cc3333;}} p{{color:#aa9980;}}</style></head>
-<body><div class="box"><h2>Authentication Failed</h2>
-<p>{err}</p></div></body></html>""").encode()
-
-        # Bind server first, THEN open browser — eliminates race condition
-        port = 8766
-        try:
-            server = http.server.HTTPServer(("localhost", port), CallbackHandler)
-        except OSError:
-            port = 8767
-            server = http.server.HTTPServer(("localhost", port), CallbackHandler)
-
-        server_ready.set()
-        webbrowser.open(oauth_url)
-        server.serve_forever()
-
-        if result["code"]:
-            self._guild_exchange_code(result["code"], result["state"])
-        else:
-            err = result.get("error", "Unknown error")
-            self.after(0, lambda: self._guild_status_lbl.configure(
-                text=f"Login failed: {err}"))
-    def _guild_exchange_code(self, code: str, state: str):
-        """Send the OAuth2 code to the backend and get session token directly."""
-        import urllib.request, urllib.parse, json as _json
-        try:
-            url = (self.GUILD_API + "/auth/callback?"
-                   + urllib.parse.urlencode({"code": code, "state": state or ""}))
-            req = urllib.request.Request(url, headers={"User-Agent": "OMT/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as r:
-                data = _json.loads(r.read())
-            token = data.get("session_token")
-            if token:
-                self._guild_session_token = token
-                self._save_guild_token(token)
-                self.after(0, self._guild_render)
-            else:
-                self.after(0, lambda: self._guild_status_lbl.configure(
-                    text="Login failed — no token in response."))
-        except Exception as e:
-            self.after(0, lambda: self._guild_status_lbl.configure(
-                text=f"Login error: {e}"))
-
     # ── State 2: Profile (logged in, no guild) ────────────────────────────────
     def _guild_state_profile(self, me: dict):
         p = self._guild_page
-        # Header
         hdr = ctk.CTkFrame(p, fg_color=BG2, height=70, corner_radius=0)
         hdr.pack(fill="x"); hdr.pack_propagate(False)
         ctk.CTkFrame(hdr, fg_color=GOLD_DK, height=1).place(relx=0, rely=1.0, relwidth=1.0, anchor="sw")
-        # Avatar
         self._guild_load_avatar(hdr, me.get("avatar"), size=46)
         ctk.CTkLabel(hdr, text=me.get("username","?"),
-                     font=("Segoe UI", 15, "bold"), text_color=TEXT).pack(side="left", padx=8)
+                     font=("Segoe UI",15,"bold"), text_color=TEXT).pack(side="left", padx=8)
         if me.get("is_superadmin"):
             ctk.CTkLabel(hdr, text="⚡ SuperAdmin", text_color="#ff4444",
                          font=F_SMALL_B).pack(side="left", padx=4)
         gold_btn(hdr, "Logout", self._guild_logout, w=90, h=32).pack(side="right", padx=12)
-        # Content
-        ctk.CTkFrame(p, height=30, fg_color="transparent").pack()
+        if me.get("is_superadmin"):
+            dim_btn(hdr, "GU Edit", self._guild_gu_edit, w=80, h=32).pack(side="right", padx=4)
+        ctk.CTkFrame(p, height=40, fg_color="transparent").pack()
         ctk.CTkLabel(p, text="You are not in any guild yet.",
-                     font=F_HEAD, text_color=DIM).pack(pady=(0, 4))
+                     font=F_HEAD, text_color=DIM).pack(pady=(0,4))
         ctk.CTkLabel(p, text="Create a new guild or join an existing one.",
-                     font=F_BODY, text_color=DIM2).pack(pady=(0, 30))
+                     font=F_BODY, text_color=DIM2).pack(pady=(0,30))
         btn_row = ctk.CTkFrame(p, fg_color="transparent"); btn_row.pack()
         gold_btn(btn_row, "⚔  Create Guild", self._guild_create_flow, w=180, h=44).pack(side="left", padx=12)
-        dim_btn(btn_row, "🔎  Join Guild",   self._guild_join_flow,   w=160, h=44).pack(side="left", padx=12)
+        dim_btn(btn_row,  "🔎  Join Guild",  self._guild_join_flow,   w=160, h=44).pack(side="left", padx=12)
         if me.get("is_superadmin"):
             ctk.CTkFrame(p, height=20, fg_color="transparent").pack()
             dim_btn(p, "🛠  Admin Panel", self._guild_admin_panel, w=160, h=36).pack()
 
-    # ── State 3: Guild view ───────────────────────────────────────────────────
+    # ── State 3: Guild view — left nav + right content ────────────────────────
     def _guild_state_guild(self, me: dict):
         p = self._guild_page
         # Header
@@ -2536,90 +2457,578 @@ h2{{color:#cc3333;}} p{{color:#aa9980;}}</style></head>
         ctk.CTkFrame(hdr, fg_color=GOLD_DK, height=1).place(relx=0, rely=1.0, relwidth=1.0, anchor="sw")
         self._guild_load_avatar(hdr, me.get("avatar"), size=46)
         ctk.CTkLabel(hdr, text=me.get("username","?"),
-                     font=("Segoe UI", 15, "bold"), text_color=TEXT).pack(side="left", padx=8)
+                     font=("Segoe UI",15,"bold"), text_color=TEXT).pack(side="left", padx=8)
+        if me.get("is_superadmin"):
+            ctk.CTkLabel(hdr, text="\u26a1 SuperAdmin", text_color="#ff4444",
+                         font=F_SMALL_B).pack(side="left", padx=4)
         gold_btn(hdr, "Logout", self._guild_logout, w=90, h=32).pack(side="right", padx=12)
-        # For each membership, show guild panel
-        _, scroll, _ = make_scrollable(p, bg=BG)
-        for m in me.get("memberships", []):
-            self._guild_draw_guild_panel(scroll, m["guild_id"], m["omt_grade"])
 
-    def _guild_draw_guild_panel(self, parent, guild_id: str, omt_grade: str):
-        """Draw a panel for one guild."""
-        try:
-            g = self._guild_api("GET", f"/guild/{guild_id}",
-                                params={"token": self._guild_session_token})
-        except RuntimeError as e:
-            ctk.CTkLabel(parent, text=f"Error loading guild: {e}",
-                         text_color=RED, font=F_SMALL).pack(padx=20, pady=4)
-            return
-        # Panel
-        border = ctk.CTkFrame(parent, fg_color=GOLD_DK, corner_radius=6)
-        border.pack(fill="x", padx=20, pady=8)
-        panel = ctk.CTkFrame(border, fg_color=BG3, corner_radius=5)
-        panel.pack(fill="both", expand=True, padx=1, pady=1)
-        # Guild header
-        ghdr = ctk.CTkFrame(panel, fg_color=BG2, corner_radius=0, height=42)
-        ghdr.pack(fill="x"); ghdr.pack_propagate(False)
-        ctk.CTkLabel(ghdr, text=f"  ⚔  {g['name']}",
-                     font=("Georgia", 14, "bold"), text_color=GOLD_LT,
-                     anchor="w").pack(side="left", padx=8)
-        grade_colors = {"leader":"#FFD700","officer":"#C0C0C0","member":TEXT,"recruit":DIM}
-        ctk.CTkLabel(ghdr, text=omt_grade.upper(),
-                     font=F_SMALL_B,
-                     text_color=grade_colors.get(omt_grade, DIM)).pack(side="right", padx=12)
-        ctk.CTkFrame(panel, fg_color=BORDER, height=1).pack(fill="x")
-        # Description
-        if g.get("description"):
-            ctk.CTkLabel(panel, text=g["description"],
-                         font=F_BODY, text_color=DIM, anchor="w",
-                         wraplength=700).pack(fill="x", padx=12, pady=6)
-        # Members list
-        ctk.CTkLabel(panel, text=f"  Members ({len(g['members'])})",
-                     font=F_BODY_B, text_color=GOLD, anchor="w").pack(fill="x", padx=10, pady=(4,2))
-        for member in g["members"][:10]:
-            mrow = ctk.CTkFrame(panel, fg_color=BG4, corner_radius=3)
-            mrow.pack(fill="x", padx=10, pady=1)
-            ctk.CTkLabel(mrow, text=member["username"],
-                         font=F_SMALL, text_color=TEXT,
-                         anchor="w", width=180).pack(side="left", padx=8, pady=3)
-            ctk.CTkLabel(mrow, text=member["omt_grade"],
-                         font=F_SMALL, text_color=grade_colors.get(member["omt_grade"], DIM),
-                         anchor="w").pack(side="left", padx=4)
-        if omt_grade == "leader":
-            dim_btn(panel, "⚙  Manage Guild", lambda gid=guild_id: self._guild_manage(gid),
-                    w=150, h=30).pack(anchor="e", padx=10, pady=6)
+        body = ctk.CTkFrame(p, fg_color=BG); body.pack(fill="both", expand=True)
+        nav  = ctk.CTkFrame(body, fg_color=BG2, width=190, corner_radius=0)
+        nav.pack(side="left", fill="y"); nav.pack_propagate(False)
+        ctk.CTkFrame(nav, fg_color=GOLD_DK, width=1, corner_radius=0).pack(side="right", fill="y")
+        self._guild_content = ctk.CTkFrame(body, fg_color=BG, corner_radius=0)
+        self._guild_content.pack(side="left", fill="both", expand=True)
+        self._guild_nav_btns = {}  # track nav buttons for active state
 
-    # ── Avatar loader ─────────────────────────────────────────────────────────
-    def _guild_load_avatar(self, parent, url: str | None, size: int = 46):
-        """Load Discord avatar from URL and display it."""
-        if not url: return
-        import threading, urllib.request
-        from PIL import Image as PILImage
-        import io
-        def _fetch():
+        memberships = me.get("memberships", [])
+        self._guild_me = me
+
+        def _nav_btn(parent, text, cmd, key):
+            """Nav button that disables itself when active."""
+            btn = ctk.CTkButton(parent, text=text, anchor="w",
+                                fg_color="transparent", text_color=TEXT,
+                                hover_color=BG3, font=F_SMALL, height=34,
+                                command=lambda: _activate(key, cmd))
+            btn.pack(fill="x", padx=4, pady=1)
+            self._guild_nav_btns[key] = btn
+            return btn
+
+        def _activate(key, cmd):
+            # Restore all buttons
+            for k, b in self._guild_nav_btns.items():
+                b.configure(fg_color="transparent", text_color=TEXT, state="normal")
+            # Mark active
+            if key in self._guild_nav_btns:
+                self._guild_nav_btns[key].configure(fg_color=BG3, text_color=GOLD_LT, state="disabled")
+            cmd()
+
+        for m in memberships:
+            guild_id  = m["guild_id"]
+            omt_grade = m["omt_grade"]
+            gname     = m.get("guild_name", guild_id[:16])
+
+            ctk.CTkLabel(nav, text=f"  \u2694  {gname[:18]}", text_color=GOLD,
+                         font=F_SMALL_B, anchor="w").pack(fill="x", padx=4, pady=(12,2))
+            ctk.CTkFrame(nav, fg_color=BORDER, height=1).pack(fill="x", padx=8)
+
+            if omt_grade == "leader":
+                _nav_btn(nav, "  \U0001f451  Guild Admin",
+                         lambda gid=guild_id: self._guild_show_admin(gid),
+                         f"admin_{guild_id}")
+                _nav_btn(nav, "  \U0001f916  Bot",
+                         lambda gid=guild_id: self._guild_show_bot(gid),
+                         f"bot_{guild_id}")
+            _nav_btn(nav, "  \U0001f465  Members",
+                     lambda gid=guild_id: self._guild_show_members(gid),
+                     f"members_{guild_id}")
+
+        # Personal section
+        ctk.CTkFrame(nav, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(12,2))
+        ctk.CTkLabel(nav, text="  Personal", text_color=DIM2,
+                     font=F_SMALL, anchor="w").pack(fill="x", padx=8, pady=(2,0))
+        _nav_btn(nav, "  \U0001f464  My Profile",  self._guild_show_profile,    "profile")
+        _nav_btn(nav, "  \U0001f3ae  My Characters", self._guild_show_characters, "characters")
+
+        # SuperAdmin section
+        if me.get("is_superadmin"):
+            ctk.CTkFrame(nav, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(12,4))
+            _nav_btn(nav, "  \u26a1  Admin Panel", self._guild_admin_panel, "admin_panel")
+            _nav_btn(nav, "  \U0001f6e0  GU Edit",    self._guild_gu_edit,    "gu_edit")
+
+        # Show first section by default
+        if memberships:
+            first = memberships[0]
+            first_gid = first["guild_id"]
+            if first["omt_grade"] == "leader":
+                _activate(f"admin_{first_gid}", lambda gid=first_gid: self._guild_show_admin(gid))
+            else:
+                _activate(f"members_{first_gid}", lambda gid=first_gid: self._guild_show_members(gid))
+
+    # ── Nav loading helper ────────────────────────────────────────────────────
+    def _guild_content_loading(self, title: str):
+        """Clear content and show loading spinner."""
+        for w in self._guild_content.winfo_children(): w.destroy()
+        ctk.CTkLabel(self._guild_content, text=title,
+                     font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(12,4))
+        ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,8))
+        lbl = ctk.CTkLabel(self._guild_content, text="\u23f3  Loading...",
+                           text_color=DIM2, font=F_BODY)
+        lbl.pack(expand=True)
+        return lbl
+
+    # ── Members page ──────────────────────────────────────────────────────────
+    def _guild_show_members(self, guild_id: str):
+        STATUS_COLORS = {"online":"#23a55a","idle":"#f0b232","dnd":"#f23f43","offline":"#80848e"}
+        # Show cached data immediately if available
+        if guild_id in getattr(self, "_members_cache", {}):
+            self._guild_content_loading("  \U0001f465  Members")
+            self.after(10, lambda: _render(self._members_cache[guild_id]))
+        else:
+            self._guild_content_loading("  \U0001f465  Members")
+        import threading
+
+        def _load():
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "OMT/1.0"})
-                with urllib.request.urlopen(req, timeout=5) as r:
-                    data = r.read()
-                img = PILImage.open(io.BytesIO(data)).convert("RGBA").resize((size, size), PILImage.LANCZOS)
-                ph  = ImageTk.PhotoImage(img)
-                self._keep(ph)
-                self.after(0, lambda: ctk.CTkLabel(parent, image=ph, text="",
-                           fg_color="transparent").pack(side="left", padx=(12,4)))
-            except: pass
-        threading.Thread(target=_fetch, daemon=True).start()
+                data = self._guild_api("GET", f"/guild/{guild_id}/members-full",
+                                       params={"token": self._guild_session_token})
+                if not hasattr(self, "_members_cache"): self._members_cache = {}
+                self._members_cache[guild_id] = data
+                self.after(0, lambda: _render(data))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: ctk.CTkLabel(
+                    self._guild_content, text=f"Error: {msg}",
+                    text_color=RED, font=F_BODY).pack(padx=16, pady=8))
 
-    # ── Flows ─────────────────────────────────────────────────────────────────
-    def _guild_create_flow(self):
-        messagebox.showinfo("Create Guild",
-            "Feature coming soon.\nMake sure the OMT backend is running, then try again.")
+        def _render(data):
+            for w in self._guild_content.winfo_children(): w.destroy()
+            ctk.CTkLabel(self._guild_content, text="  \U0001f465  Members",
+                         font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(12,4))
+            ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,8))
 
-    def _guild_join_flow(self):
-        messagebox.showinfo("Join Guild",
-            "Feature coming soon.\nMake sure the OMT backend is running, then try again.")
+            grade_names = data.get("grade_names", {
+                "leader":"Guild Leader","officer":"Officer",
+                "member":"Member","recruit":"Recruit"
+            })
+            members_by_grade = data.get("members_by_grade", {})
+            grade_order = data.get("grade_order", ["leader","officer","member","recruit"])
 
-    def _guild_manage(self, guild_id: str):
-        messagebox.showinfo("Manage Guild", f"Guild management panel coming soon.\nGuild ID: {guild_id}")
+            scroll = ctk.CTkScrollableFrame(self._guild_content, fg_color="transparent")
+            scroll.pack(fill="both", expand=True, padx=8)
+
+            for grade in grade_order:
+                members = members_by_grade.get(grade, [])
+                if not members: continue
+                # Grade header
+                ctk.CTkLabel(scroll, text=f"  {grade_names.get(grade, grade)} ({len(members)})",
+                             font=F_BODY_B, text_color=GOLD, anchor="w").pack(fill="x", padx=8, pady=(10,2))
+                ctk.CTkFrame(scroll, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(0,4))
+                for mbr in members:
+                    row = ctk.CTkFrame(scroll, fg_color=BG2, corner_radius=4)
+                    row.pack(fill="x", padx=4, pady=1)
+                    # Status dot
+                    status = mbr.get("discord_status","offline")
+                    dot_color = STATUS_COLORS.get(status, STATUS_COLORS["offline"])
+                    dot = ctk.CTkFrame(row, width=10, height=10, corner_radius=5,
+                                       fg_color=dot_color)
+                    dot.pack(side="left", padx=(10,4))
+                    dot.pack_propagate(False)
+                    # Name color: gold if connected to OMT, grey if not
+                    name_color = GOLD if mbr.get("omt_connected") else DIM
+                    ctk.CTkLabel(row, text=mbr.get("username","?"),
+                                 font=F_BODY, text_color=name_color,
+                                 anchor="w").pack(side="left", padx=4, pady=6)
+                    # Buttons
+                    dim_btn(row, "Présentiel",
+                            lambda uid=mbr["user_id"]: self._guild_member_presentiel(uid),
+                            w=90, h=26).pack(side="right", padx=4, pady=4)
+                    dim_btn(row, "Characters",
+                            lambda uid=mbr["user_id"]: self._guild_member_characters(uid),
+                            w=90, h=26).pack(side="right", padx=4, pady=4)
+
+        threading.Thread(target=_load, daemon=True).start()
+
+    def _guild_member_characters(self, user_id: str):
+        messagebox.showinfo("Characters", f"Characters for {user_id} — coming soon.")
+
+    def _guild_member_presentiel(self, user_id: str):
+        messagebox.showinfo("Présentiel", f"Présentiel for {user_id} — coming soon.")
+
+    # ── Bot page ──────────────────────────────────────────────────────────────
+    def _guild_show_bot(self, guild_id: str):
+        self._guild_content_loading("  \U0001f916  Bot")
+        import threading
+
+        def _load():
+            try:
+                if guild_id in self._guild_cache:
+                    g = self._guild_cache[guild_id]
+                else:
+                    g = self._guild_api("GET", f"/guild/{guild_id}/full",
+                                        params={"token": self._guild_session_token})
+                    self._guild_cache[guild_id] = g
+                self.after(0, lambda: _render(g))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: ctk.CTkLabel(
+                    self._guild_content, text=f"Error: {msg}",
+                    text_color=RED, font=F_BODY).pack(padx=16, pady=8))
+
+        def _render(roles_data):
+            for w in self._guild_content.winfo_children(): w.destroy()
+            ctk.CTkLabel(self._guild_content, text="  \U0001f916  Bot",
+                         font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(12,4))
+            ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,16))
+            bot_present = roles_data.get("bot_present", False)
+            dot = ctk.CTkFrame(self._guild_content, width=14, height=14, corner_radius=7,
+                               fg_color="#23a55a" if bot_present else "#80848e")
+            dot.pack_propagate(False)
+            dot.pack(pady=(0,4))
+            ctk.CTkLabel(self._guild_content,
+                         text="Bot is in the server" if bot_present else "Bot not detected",
+                         font=F_BODY_B,
+                         text_color="#23a55a" if bot_present else DIM2).pack(pady=(0,16))
+            ctk.CTkFrame(self._guild_content, fg_color=BORDER, height=1).pack(fill="x", padx=40, pady=(0,16))
+            def _invite():
+                import webbrowser
+                try:
+                    d = self._guild_api("GET", "/guild/bot-invite-url",
+                                        params={"server_id": guild_id})
+                    webbrowser.open(d["url"])
+                except Exception as e:
+                    messagebox.showerror("Error", str(e))
+            gold_btn(self._guild_content, "\U0001f517  Invite Bot", _invite, w=200, h=42).pack(pady=6)
+            ctk.CTkLabel(self._guild_content,
+                         text="After inviting, click Bot again to refresh status.",
+                         font=F_SMALL, text_color=DIM2).pack(pady=4)
+
+        threading.Thread(target=_load, daemon=True).start()
+
+    # ── Guild Admin page ──────────────────────────────────────────────────────
+    def _guild_show_admin(self, guild_id: str):
+        self._guild_content_loading("  \U0001f451  Guild Admin")
+        import threading
+        all_roles      = []
+        mappings_state = {}   # grade_key → [{id, name}]
+        grades_state   = []   # [{key, name}]  — ordered list of grades
+
+        def _load():
+            try:
+                # Use cache if available — invalidated on save
+                if guild_id in self._guild_cache:
+                    g = self._guild_cache[guild_id]
+                else:
+                    g = self._guild_api("GET", f"/guild/{guild_id}/full",
+                                        params={"token": self._guild_session_token})
+                    self._guild_cache[guild_id] = g
+                if g.get("bot_present"):
+                    all_roles.extend(g.get("discord_roles", []))
+                grade_names = g.get("grade_names", {"leader":"Guild Leader","officer":"Officer","member":"Member","recruit":"Recruit"})
+                grade_order = g.get("grade_order", ["leader","officer","member","recruit"])
+                for gk in grade_order:
+                    grades_state.append({"key": gk, "name": grade_names.get(gk, gk.capitalize())})
+                    mappings_state[gk] = []
+                for rm in g.get("role_mappings", []):
+                    gk = rm["omt_grade"]
+                    if gk not in mappings_state:
+                        mappings_state[gk] = []
+                    mappings_state[gk].append({"id": rm["discord_role_id"], "name": rm["discord_role_name"]})
+                self.after(0, lambda gd=g: _render(gd))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: ctk.CTkLabel(
+                    self._guild_content, text=f"Error: {msg}",
+                    text_color=RED, font=F_BODY).pack(padx=16, pady=8))
+
+        def _render(g):
+            for w in self._guild_content.winfo_children(): w.destroy()
+            ctk.CTkLabel(self._guild_content, text="  \U0001f451  Guild Admin",
+                         font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(12,4))
+            ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,8))
+
+            # ── Grades section — "Grade System" parent accordion ────────────
+            # Parent accordion container
+            gs_outer = ctk.CTkFrame(self._guild_content, fg_color="transparent")
+            gs_outer.pack(fill="both", expand=True, padx=16, pady=(0,4))
+            gs_outer._open = True
+
+            def _render_grade_system():
+                for w in gs_outer.winfo_children(): w.destroy()
+                is_open = getattr(gs_outer, "_open", True)
+                # Parent header
+                gs_hdr = ctk.CTkFrame(gs_outer, fg_color=BG3, corner_radius=6)
+                gs_hdr.pack(fill="x")
+                arrow = "▼" if is_open else "▶"
+                ctk.CTkLabel(gs_hdr, text=f"  {arrow}  Grade System",
+                             font=F_BODY_B, text_color=GOLD_LT, anchor="w").pack(side="left", padx=10, pady=8)
+                def _toggle_gs():
+                    gs_outer._open = not getattr(gs_outer, "_open", True)
+                    _render_grade_system()
+                gs_hdr.bind("<Button-1>", lambda e: _toggle_gs())
+
+                if not is_open: return
+
+                # Inner grades frame
+                grades_frame_inner = ctk.CTkScrollableFrame(gs_outer, fg_color="transparent")
+                grades_frame_inner.pack(fill="both", expand=True, padx=4, pady=(0,4))
+
+                for ge in grades_state:
+                    gk = ge["key"]
+                    gf = ctk.CTkFrame(grades_frame_inner, fg_color="transparent")
+                    gf.pack(fill="x", pady=2, padx=2)
+                    gf._open = True
+                    accordion_frames[gk] = gf
+                    _render_accordion(ge)
+
+                def _add_grade():
+                    import secrets as _sec
+                    new_key  = "grade_" + _sec.token_hex(4)
+                    new_name = f"Grade {len(grades_state)+1}"
+                    grades_state.append({"key": new_key, "name": new_name})
+                    mappings_state[new_key] = []
+                    _render_grade_system()
+                dim_btn(grades_frame_inner, "+ Add Grade", _add_grade, w=130, h=30).pack(
+                    anchor="w", padx=4, pady=6)
+
+            accordion_frames = {}
+
+            def _render_accordion(grade_entry):
+                gk   = grade_entry["key"]
+                gname= grade_entry["name"]
+                outer= accordion_frames.get(gk)
+                if not outer: return
+                for w in outer.winfo_children(): w.destroy()
+                # Header row (click to toggle)
+                is_open = getattr(outer, "_open", True)
+                hdr_row = ctk.CTkFrame(outer, fg_color=BG3, corner_radius=4)
+                hdr_row.pack(fill="x")
+                arrow = "\u25bc" if is_open else "\u25b6"
+                ctk.CTkLabel(hdr_row, text=f"  {arrow}  {gname}",
+                             font=F_BODY_B, text_color=GOLD, anchor="w").pack(side="left", padx=8, pady=6)
+                # Name edit
+                name_var = tk.StringVar(value=gname)
+                name_entry = ctk.CTkEntry(hdr_row, textvariable=name_var,
+                                          width=140, height=26, font=F_SMALL,
+                                          fg_color=BG4, border_color=BORDER,
+                                          text_color=TEXT)
+                name_entry.pack(side="left", padx=4)
+                def _save_name(gk2=gk, var=name_var, ge=grade_entry):
+                    ge["name"] = var.get()
+                ctk.CTkButton(hdr_row, text="\u2713", width=26, height=26,
+                              fg_color=BG4, hover_color=GOLD_DK, text_color=GOLD,
+                              font=F_SMALL, corner_radius=4,
+                              command=_save_name).pack(side="left", padx=2)
+                # Delete grade button (not for leader)
+                if gk != "leader":
+                    def _del_grade(gk2=gk, ge=grade_entry):
+                        grades_state.remove(ge)
+                        mappings_state.pop(gk2, None)
+                        accordion_frames[gk2].destroy()
+                    ctk.CTkButton(hdr_row, text="\u00d7", width=26, height=26,
+                                  fg_color="transparent", hover_color=RED, text_color=RED,
+                                  font=F_BODY_B, corner_radius=4,
+                                  command=_del_grade).pack(side="right", padx=4)
+                # Toggle
+                def _toggle(outer2=outer, ge2=grade_entry):
+                    outer2._open = not getattr(outer2, "_open", True)
+                    _render_accordion(ge2)
+                hdr_row.bind("<Button-1>", lambda e, o=outer, ge=grade_entry: _toggle(o, ge))
+
+                if not is_open: return
+                # Body: roles
+                body_f = ctk.CTkFrame(outer, fg_color=BG2, corner_radius=0)
+                body_f.pack(fill="x", padx=2, pady=(0,2))
+                roles_row = ctk.CTkFrame(body_f, fg_color="transparent")
+                roles_row.pack(fill="x", padx=8, pady=4)
+                for role in mappings_state.get(gk, []):
+                    tag = ctk.CTkFrame(roles_row, fg_color=BG4, corner_radius=4)
+                    tag.pack(side="left", padx=2)
+                    ctk.CTkLabel(tag, text=role["name"], font=F_SMALL,
+                                 text_color=TEXT).pack(side="left", padx=(6,2))
+                    ctk.CTkButton(tag, text="\u00d7", width=18, height=18,
+                                  fg_color="transparent", text_color=DIM2, hover_color=RED,
+                                  font=F_SMALL,
+                                  command=lambda r=role, gk2=gk, ge=grade_entry: [
+                                      mappings_state[gk2].remove(r), _render_accordion(ge)
+                                  ]).pack(side="left", padx=(0,2))
+                # + Add role
+                def _add_role(gk2=gk, ge=grade_entry):
+                    if not all_roles:
+                        messagebox.showinfo("Info", "Invite the bot first to load roles.")
+                        return
+                    popup = ctk.CTkToplevel(self)
+                    popup.title("Add Role"); popup.geometry("280x340")
+                    popup.configure(fg_color=BG); popup.grab_set()
+                    self._set_win_icon(popup)
+                    sf = ctk.CTkScrollableFrame(popup, fg_color=BG2, height=280)
+                    sf.pack(fill="both", expand=True, padx=8, pady=8)
+                    used = {r["id"] for roles in mappings_state.values() for r in roles}
+                    for role in all_roles:
+                        if role["id"] in used: continue
+                        def _pick(r=role, gk3=gk2, ge2=ge):
+                            if gk3 not in mappings_state: mappings_state[gk3] = []
+                            mappings_state[gk3].append(r)
+                            _render_accordion(ge2); popup.destroy()
+                        ctk.CTkButton(sf, text=role["name"], anchor="w",
+                                      fg_color=BG3, hover_color=BG4, text_color=TEXT,
+                                      font=F_BODY, height=32, command=_pick).pack(fill="x", padx=4, pady=2)
+                ctk.CTkButton(body_f, text="+ Add Role", anchor="w",
+                              fg_color="transparent", text_color=GOLD, hover_color=BG3,
+                              font=F_SMALL, height=28,
+                              command=_add_role).pack(anchor="w", padx=10, pady=(0,4))
+
+            # Build Grade System
+            _render_grade_system()
+
+            # ── Bottom bar: Save + Delete ────────────────────────────────────
+            bot_bar = ctk.CTkFrame(self._guild_content, fg_color=BG2, height=52, corner_radius=0)
+            bot_bar.pack(fill="x", side="bottom"); bot_bar.pack_propagate(False)
+            ctk.CTkFrame(bot_bar, fg_color=BORDER, height=1).place(relx=0, rely=0, relwidth=1.0)
+
+            def _save_all():
+                self._guild_cache.pop(guild_id, None)  # invalidate cache
+                flat = [{"discord_role_id": r["id"], "discord_role_name": r["name"],
+                         "omt_grade": gk}
+                        for gk, roles in mappings_state.items() for r in roles]
+                gnames = {ge["key"]: ge["name"] for ge in grades_state}
+                gorder = [ge["key"] for ge in grades_state]
+                def _do():
+                    try:
+                        self._guild_api("POST", f"/guild/{guild_id}/roles",
+                                        params={"token": self._guild_session_token}, body=flat)
+                        self._guild_api("PATCH", f"/guild/{guild_id}",
+                                        params={"token": self._guild_session_token},
+                                        body={"grade_names": gnames, "grade_order": gorder})
+                        self.after(0, lambda: messagebox.showinfo("Saved", "Guild settings saved."))
+                    except RuntimeError as e:
+                        err_msg = str(e)
+                        self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                threading.Thread(target=_do, daemon=True).start()
+            gold_btn(bot_bar, "\U0001f4be  Save", _save_all, w=120, h=36).pack(
+                side="left", padx=12, pady=8)
+
+            def _delete_guild():
+                win2 = ctk.CTkToplevel(self)
+                win2.title("Delete Guild"); win2.geometry("420x220")
+                win2.configure(fg_color=BG); win2.grab_set()
+                self._set_win_icon(win2)
+                ctk.CTkLabel(win2, text="\u26a0\ufe0f  Delete Guild",
+                             font=F_HEAD, text_color=RED).pack(pady=(16,8))
+                ctk.CTkLabel(win2, text='Type  "i want to delete my guild"  to confirm:',
+                             font=F_BODY, text_color=DIM).pack(pady=(0,6))
+                conf_var = tk.StringVar()
+                ctk.CTkEntry(win2, textvariable=conf_var, width=320, height=34,
+                             font=F_BODY, fg_color=BG2, border_color=BORDER,
+                             text_color=TEXT).pack(pady=4)
+                def _confirm_delete():
+                    if conf_var.get().strip().lower() == "i want to delete my guild":
+                        def _do():
+                            try:
+                                self._guild_api("DELETE", f"/guild/{guild_id}",
+                                                params={"token": self._guild_session_token})
+                                self.after(0, lambda: [win2.destroy(),
+                                    messagebox.showinfo("Deleted","Guild deleted."),
+                                    self._guild_render()])
+                            except RuntimeError as e:
+                                err_msg = str(e)
+                                self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                        threading.Thread(target=_do, daemon=True).start()
+                    else:
+                        messagebox.showerror("Error", "Confirmation text does not match.")
+                ctk.CTkButton(win2, text="\U0001f5d1  Confirm Delete",
+                              fg_color="#8b0000", hover_color=RED, text_color="white",
+                              font=F_BODY_B, width=200, height=38, corner_radius=6,
+                              command=_confirm_delete).pack(pady=10)
+            ctk.CTkButton(bot_bar, text="\U0001f5d1  Delete Guild",
+                          fg_color="transparent", hover_color="#8b0000",
+                          text_color=RED, font=F_SMALL, width=130, height=36,
+                          command=_delete_guild).pack(side="right", padx=12, pady=8)
+
+        threading.Thread(target=_load, daemon=True).start()
+    # ── My Profile ────────────────────────────────────────────────────────────
+    def _guild_show_profile(self):
+        for w in self._guild_content.winfo_children(): w.destroy()
+        me = getattr(self, '_guild_me', {})
+        ctk.CTkLabel(self._guild_content, text="  \U0001f464  My Profile",
+                     font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(12,4))
+        ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,12))
+        # Avatar + username
+        info = ctk.CTkFrame(self._guild_content, fg_color=BG2, corner_radius=6)
+        info.pack(fill="x", padx=16, pady=4)
+        self._guild_load_avatar(info, me.get("avatar"), size=64)
+        ctk.CTkLabel(info, text=me.get("username","?"),
+                     font=("Segoe UI",16,"bold"), text_color=TEXT).pack(side="left", padx=8, pady=12)
+        ctk.CTkLabel(info, text=f"Discord ID: {me.get('id','?')}",
+                     font=F_SMALL, text_color=DIM2).pack(side="left", padx=4)
+        # Memberships
+        ctk.CTkFrame(self._guild_content, height=10, fg_color="transparent").pack()
+        ctk.CTkLabel(self._guild_content, text="  Guilds",
+                     font=F_BODY_B, text_color=GOLD, anchor="w").pack(fill="x", padx=16)
+        grade_colors = {"leader":"#FFD700","officer":"#C0C0C0","member":TEXT,"recruit":DIM}
+        for m in me.get("memberships",[]):
+            row = ctk.CTkFrame(self._guild_content, fg_color=BG2, corner_radius=4)
+            row.pack(fill="x", padx=16, pady=2)
+            ctk.CTkLabel(row, text=m.get("guild_name", m["guild_id"]),
+                         font=F_BODY, text_color=TEXT, anchor="w").pack(side="left", padx=12, pady=6)
+            ctk.CTkLabel(row, text=m["omt_grade"].upper(), font=F_SMALL,
+                         text_color=grade_colors.get(m["omt_grade"],DIM)).pack(side="right", padx=12)
+        ctk.CTkLabel(self._guild_content, text="More profile fields coming soon.",
+                     font=F_SMALL, text_color=DIM2).pack(pady=16)
+
+    # ── My Characters ─────────────────────────────────────────────────────────
+    def _guild_show_characters(self):
+        for w in self._guild_content.winfo_children(): w.destroy()
+        me = getattr(self, '_guild_me', {})
+        ctk.CTkLabel(self._guild_content, text="  \U0001f3ae  My Characters",
+                     font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(12,4))
+        ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,12))
+        chars = me.get("characters", [])
+        if chars:
+            for c in chars:
+                row = ctk.CTkFrame(self._guild_content, fg_color=BG2, corner_radius=4)
+                row.pack(fill="x", padx=16, pady=2)
+                ctk.CTkLabel(row, text=c["name"], font=F_BODY,
+                             text_color=TEXT, anchor="w").pack(side="left", padx=12, pady=6)
+        else:
+            ctk.CTkLabel(self._guild_content, text="No characters registered yet.",
+                         font=F_BODY, text_color=DIM2).pack(pady=8)
+        ctk.CTkLabel(self._guild_content, text="Character management coming soon.",
+                     font=F_SMALL, text_color=DIM2).pack(pady=4)
+
+    # ── GU Edit — SuperAdmin guild manager ────────────────────────────────────
+    def _guild_gu_edit(self):
+        win = ctk.CTkToplevel(self)
+        win.title("GU Edit — Guild Manager"); win.geometry("700x520")
+        win.configure(fg_color=BG); win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        self._set_win_icon(win)
+        ctk.CTkLabel(win, text="\U0001f6e0  GU Edit — All Guilds",
+                     font=("Georgia",15,"bold"), text_color="#ff4444").pack(pady=(14,4))
+        ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=20, pady=(0,8))
+        status = ctk.CTkLabel(win, text="Loading...", text_color=DIM2, font=F_SMALL)
+        status.pack(pady=2)
+        scroll = ctk.CTkScrollableFrame(win, fg_color=BG2, height=400)
+        scroll.pack(fill="both", expand=True, padx=16, pady=4)
+
+        def _load():
+            try:
+                data = self._guild_api("GET", "/admin/guilds",
+                                       params={"token": self._guild_session_token})
+                self.after(0, lambda: _render(data))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: status.configure(
+                    text=f"Error: {msg}", text_color=RED))
+
+        def _render(guilds):
+            status.pack_forget()
+            for w in scroll.winfo_children(): w.destroy()
+            if not guilds:
+                ctk.CTkLabel(scroll, text="No guilds.", text_color=DIM2, font=F_BODY).pack(pady=20)
+                return
+            for g in guilds:
+                row = ctk.CTkFrame(scroll, fg_color=BG3, corner_radius=4)
+                row.pack(fill="x", pady=3, padx=4)
+                info = ctk.CTkFrame(row, fg_color="transparent"); info.pack(side="left", fill="x", expand=True)
+                ctk.CTkLabel(info, text=g.get("name","?"), font=F_BODY_B,
+                             text_color=GOLD, anchor="w").pack(fill="x", padx=10, pady=(4,0))
+                ctk.CTkLabel(info, text=f"ID: {g['id']}  |  Owner: {g.get('owner_id','?')}  |  Members: {g.get('member_count',0)}",
+                             font=F_SMALL, text_color=DIM2, anchor="w").pack(fill="x", padx=10, pady=(0,4))
+                def _delete(gid=g["id"], gname=g.get("name","?")):
+                    if not messagebox.askyesno("Delete Guild",
+                        f"Delete '{gname}'?\nThis will remove all members and kick the bot."):
+                        return
+                    def _do():
+                        try:
+                            self._guild_api("DELETE", f"/guild/{gid}/admin-delete",
+                                            params={"token": self._guild_session_token})
+                            self.after(0, lambda: [
+                                messagebox.showinfo("Done", f"'{gname}' deleted."),
+                                _load()
+                            ])
+                        except RuntimeError as e:
+                            err_msg = str(e)
+                            self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                    import threading
+                    threading.Thread(target=_do, daemon=True).start()
+                ctk.CTkButton(row, text="\U0001f5d1 Delete", width=90, height=32,
+                              fg_color="#8b0000", hover_color=RED, text_color="white",
+                              font=F_SMALL, corner_radius=4,
+                              command=_delete).pack(side="right", padx=8, pady=6)
+
+        import threading
+        threading.Thread(target=_load, daemon=True).start()
 
     def _guild_admin_panel(self):
         """SuperAdmin debug panel."""
@@ -2628,6 +3037,8 @@ h2{{color:#cc3333;}} p{{color:#aa9980;}}</style></head>
         win.geometry("700x500")
         win.configure(fg_color=BG)
         win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        self._set_win_icon(win)
         ctk.CTkLabel(win, text="⚡ SuperAdmin Panel",
                      font=("Georgia", 16, "bold"), text_color="#ff4444").pack(pady=12)
         ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=20)
@@ -2641,21 +3052,38 @@ h2{{color:#cc3333;}} p{{color:#aa9980;}}</style></head>
                 try:
                     data = self._guild_api("GET", endpoint,
                                            params={"token": self._guild_session_token})
-                    self.after(0, lambda: _render(data, label))
+                    def _safe_render():
+                        if not win.winfo_exists(): return
+                        _render(data, label)
+                    self.after(0, _safe_render)
                 except RuntimeError as e:
-                    self.after(0, lambda: ctk.CTkLabel(content, text=f"Error: {e}",
-                               text_color=RED, font=F_SMALL).pack(pady=8))
+                    err_msg = str(e)
+                    def _safe_err():
+                        if not win.winfo_exists(): return
+                        ctk.CTkLabel(content, text=f"Error: {msg}",
+                                     text_color=RED, font=F_SMALL).pack(pady=8)
+                    self.after(0, lambda msg=err_msg: _safe_err() if win.winfo_exists() else None)
             threading.Thread(target=_fetch, daemon=True).start()
         def _render(data, label):
             for w in content.winfo_children(): w.destroy()
-            ctk.CTkLabel(content, text=f"{label} ({len(data)} entries)",
-                         text_color=GOLD, font=F_BODY_B, anchor="w").pack(fill="x", padx=8, pady=4)
-            for item in data:
-                row = ctk.CTkFrame(content, fg_color=BG3, corner_radius=3)
-                row.pack(fill="x", padx=6, pady=1)
-                text = " | ".join(f"{k}: {v}" for k, v in list(item.items())[:4])
-                ctk.CTkLabel(row, text=text, font=F_SMALL, text_color=TEXT,
-                             anchor="w", wraplength=600).pack(side="left", padx=6, pady=3)
+            # Handle dict (stats) vs list (users/guilds)
+            if isinstance(data, dict):
+                ctk.CTkLabel(content, text=f"{label}",
+                             text_color=GOLD, font=F_BODY_B, anchor="w").pack(fill="x", padx=8, pady=4)
+                for k, v in data.items():
+                    row = ctk.CTkFrame(content, fg_color=BG3, corner_radius=3)
+                    row.pack(fill="x", padx=6, pady=1)
+                    ctk.CTkLabel(row, text=f"{k}: {v}", font=F_BODY, text_color=TEXT,
+                                 anchor="w").pack(side="left", padx=10, pady=4)
+            else:
+                ctk.CTkLabel(content, text=f"{label} ({len(data)} entries)",
+                             text_color=GOLD, font=F_BODY_B, anchor="w").pack(fill="x", padx=8, pady=4)
+                for item in data:
+                    row = ctk.CTkFrame(content, fg_color=BG3, corner_radius=3)
+                    row.pack(fill="x", padx=6, pady=1)
+                    text = " | ".join(f"{k}: {v}" for k, v in list(item.items())[:4])
+                    ctk.CTkLabel(row, text=text, font=F_SMALL, text_color=TEXT,
+                                 anchor="w", wraplength=600).pack(side="left", padx=6, pady=3)
         dim_btn(tab, "Users",  lambda: load_section("/admin/users",  "Users"),  w=80, h=28).pack(side="left", padx=4)
         dim_btn(tab, "Guilds", lambda: load_section("/admin/guilds", "Guilds"), w=80, h=28).pack(side="left", padx=4)
         dim_btn(tab, "Stats",  lambda: load_section("/admin/stats",  "Stats"),  w=80, h=28).pack(side="left", padx=4)
@@ -2671,6 +3099,243 @@ h2{{color:#cc3333;}} p{{color:#aa9980;}}</style></head>
         self._guild_session_token = None
         self._save_guild_token(None)
         self._guild_render()
+
+    def _guild_load_avatar(self, parent, url, size=46):
+        if not url: return
+        import threading, urllib.request, io
+        def _fetch():
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent":"OMT/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as r: data = r.read()
+                from PIL import Image as PILImage
+                img = PILImage.open(io.BytesIO(data)).convert("RGBA").resize((size,size), PILImage.LANCZOS)
+                ph  = ImageTk.PhotoImage(img); self._keep(ph)
+                self.after(0, lambda: ctk.CTkLabel(parent, image=ph, text="",
+                           fg_color="transparent").pack(side="left", padx=(12,4)))
+            except: pass
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _guild_do_login(self):
+        import threading
+        try:
+            resp = self._guild_api("GET", "/auth/url")
+            url  = resp["url"]
+        except RuntimeError as e:
+            messagebox.showerror("Error", f"Cannot reach Guild API.\nMake sure the backend is running.\n\n{e}")
+            return
+        self._guild_status_lbl.configure(text="Waiting for Discord login...")
+        threading.Thread(target=self._guild_oauth_server, args=(url,), daemon=True).start()
+
+    def _guild_oauth_server(self, oauth_url: str):
+        import http.server, urllib.parse, webbrowser, threading
+        result = {"code": None, "state": None, "error": None}
+        class CallbackHandler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args): pass
+            def do_GET(self):
+                print(f"[OAuth] Received: {self.path}")
+                parsed = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed.query)
+                if parsed.path not in ("/callback", "/"):
+                    self.send_response(204); self.end_headers(); return
+                if "code" in params:
+                    result["code"]  = params["code"][0]
+                    result["state"] = params.get("state", [None])[0]
+                    html = b"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{background:#080808;color:#e8dcc8;font-family:'Segoe UI',sans-serif;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+.box{background:#111;border:1px solid #c8952a;border-radius:10px;padding:40px 60px;text-align:center;}
+.star{font-size:48px;color:#c8952a;margin-bottom:16px;}
+h2{color:#c8952a;margin:0 0 8px;}p{color:#aa9980;margin:0;}</style></head>
+<body><div class="box"><div class="star">&#10022;</div>
+<h2>Connected!</h2><p>You can close this tab.<br>OMT will update automatically.</p>
+</div></body></html>"""
+                elif "error" in params:
+                    result["error"] = params["error"][0]
+                    html = b"<html><body>Authentication failed.</body></html>"
+                else:
+                    html = b"<html><body>Unexpected.</body></html>"
+                self.send_response(200)
+                self.send_header("Content-Type","text/html; charset=utf-8")
+                self.end_headers(); self.wfile.write(html)
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+        port = 8766
+        try: server = http.server.HTTPServer(("127.0.0.1", port), CallbackHandler)
+        except OSError:
+            port = 8767; server = http.server.HTTPServer(("127.0.0.1", port), CallbackHandler)
+        webbrowser.open(oauth_url)
+        server.serve_forever()
+        if result["code"]:
+            self._guild_exchange_code(result["code"], result["state"])
+        else:
+            err = result.get("error","Unknown error")
+            self.after(0, lambda msg=err: self._guild_status_lbl.configure(text=f"Login failed: {msg}"))
+
+    def _guild_exchange_code(self, code: str, state: str):
+        import os, threading, json as _json, urllib.request
+        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+        try:
+            from requests_oauthlib import OAuth2Session
+        except ImportError:
+            self.after(0, lambda: self._guild_status_lbl.configure(text="Missing: pip install requests-oauthlib"))
+            return
+        CLIENT_ID="1513359601054126140"; CLIENT_SECRET="1IqsjewYel8P8sL_UMdLURAoCmf6R3k8"
+        TOKEN_URL="https://discord.com/api/oauth2/token"
+        REDIRECT_URI="http://127.0.0.1:8766/callback"
+        def _do():
+            try:
+                callback_url = f"{REDIRECT_URI}?code={code}&state={state or ''}"
+                discord = OAuth2Session(CLIENT_ID, redirect_uri=REDIRECT_URI, state=state,
+                                        scope=["identify","guilds"])
+                token = discord.fetch_token(TOKEN_URL, client_secret=CLIENT_SECRET,
+                                             authorization_response=callback_url)
+                access_token = token.get("access_token")
+                if not access_token: raise RuntimeError("No access_token")
+                print("[OAuth] Exchange OK")
+            except Exception as exc:
+                err_msg = str(exc)
+                print(f"[OAuth] Exchange error: {err_msg}")
+                self.after(0, lambda msg=err_msg: self._guild_status_lbl.configure(
+                    text=f"Discord auth failed: {msg}")); return
+            try:
+                body = _json.dumps({"access_token":access_token,
+                                     "refresh_token":token.get("refresh_token",""),
+                                     "state":state or ""}).encode()
+                req = urllib.request.Request(self.GUILD_API+"/auth/register", data=body,
+                    headers={"Content-Type":"application/json","User-Agent":"OMT/1.0"}, method="POST")
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    data = _json.loads(r.read())
+                session_token = data.get("session_token")
+                if session_token:
+                    self._guild_session_token = session_token
+                    self._save_guild_token(session_token)
+                    self.after(0, lambda: self._show("Guild"))
+                else:
+                    self.after(0, lambda: self._guild_status_lbl.configure(text="Login failed — no session token."))
+            except Exception as exc:
+                err_msg = str(exc)
+                self.after(0, lambda msg=err_msg: self._guild_status_lbl.configure(text=f"Backend error: {msg}"))
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _guild_create_flow(self):
+        win = ctk.CTkToplevel(self); win.title("Create Guild"); win.geometry("480x500")
+        win.configure(fg_color=BG); win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", win.destroy); self._set_win_icon(win)
+        ctk.CTkLabel(win, text="Create a Guild", font=("Georgia",16,"bold"),
+                     text_color=GOLD_LT).pack(pady=(16,4))
+        ctk.CTkLabel(win, text="Select the Discord server for your guild.",
+                     font=F_BODY, text_color=DIM).pack(pady=(0,10))
+        ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=20, pady=(0,8))
+        status = ctk.CTkLabel(win, text="Loading your Discord servers...", text_color=DIM2, font=F_SMALL)
+        status.pack(pady=4)
+        scroll_f = ctk.CTkScrollableFrame(win, fg_color=BG2, height=340)
+        scroll_f.pack(fill="both", expand=True, padx=16, pady=4)
+        def _load():
+            try:
+                data = self._guild_api("GET", "/guild/discord-servers",
+                                       params={"token":self._guild_session_token})
+                servers = data.get("admin_servers",[])
+                self.after(0, lambda: _render(servers))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: status.configure(text=f"Error: {msg}", text_color=RED))
+        def _render(servers):
+            status.pack_forget()
+            for w in scroll_f.winfo_children(): w.destroy()
+            if not servers:
+                ctk.CTkLabel(scroll_f, text="No admin servers found.", text_color=DIM2, font=F_BODY).pack(pady=20)
+                return
+            for s in servers:
+                row = ctk.CTkFrame(scroll_f, fg_color=BG3, corner_radius=4)
+                row.pack(fill="x", pady=3, padx=4)
+                ctk.CTkLabel(row, text=s["name"], font=F_BODY, text_color=TEXT, anchor="w").pack(side="left", padx=12, pady=8)
+                if s.get("has_guild"):
+                    ctk.CTkLabel(row, text="Already exists", text_color=DIM2, font=F_SMALL).pack(side="right", padx=8)
+                    def _join_leader(sv=s):
+                        def _do():
+                            try:
+                                self._guild_api("POST", f"/guild/{sv['id']}/join-as-leader",
+                                                params={"token":self._guild_session_token})
+                                self.after(0, lambda: [win.destroy(), self._show("Guild"), self._guild_render()])
+                            except RuntimeError as e:
+                                err_msg = str(e)
+                                self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                        import threading; threading.Thread(target=_do, daemon=True).start()
+                    dim_btn(row, "Join as Leader", _join_leader, w=120, h=30).pack(side="right", padx=4, pady=4)
+                else:
+                    def _create(sv=s):
+                        def _do():
+                            try:
+                                self._guild_api("POST", "/guild/create",
+                                    params={"token":self._guild_session_token},
+                                    body={"discord_server_id":sv["id"],"discord_server_name":sv["name"],"discord_icon":sv.get("icon")})
+                                self.after(0, lambda: [win.destroy(), self._show("Guild"), self._guild_render()])
+                            except RuntimeError as e:
+                                err_msg = str(e)
+                                self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                        import threading; threading.Thread(target=_do, daemon=True).start()
+                    gold_btn(row, "Create", _create, w=80, h=30).pack(side="right", padx=8, pady=4)
+        import threading; threading.Thread(target=_load, daemon=True).start()
+
+    def _guild_join_flow(self):
+        win = ctk.CTkToplevel(self); win.title("Join a Guild"); win.geometry("480x460")
+        win.configure(fg_color=BG); win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", win.destroy); self._set_win_icon(win)
+        ctk.CTkLabel(win, text="Join a Guild", font=("Georgia",16,"bold"), text_color=GOLD_LT).pack(pady=(16,4))
+        ctk.CTkLabel(win, text="Your grade is detected automatically from your Discord roles.",
+                     font=F_BODY, text_color=DIM).pack(pady=(0,10))
+        ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=20, pady=(0,8))
+        status = ctk.CTkLabel(win, text="Loading guilds...", text_color=DIM2, font=F_SMALL); status.pack(pady=4)
+        scroll_f = ctk.CTkScrollableFrame(win, fg_color=BG2, height=320)
+        scroll_f.pack(fill="both", expand=True, padx=16, pady=4)
+        def _load():
+            try:
+                data = self._guild_api("GET", "/guild/discord-servers",
+                                       params={"token":self._guild_session_token})
+                self.after(0, lambda: _render(data.get("joinable_servers",[])))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: status.configure(text=f"Error: {msg}", text_color=RED))
+        def _render(servers):
+            status.pack_forget()
+            for w in scroll_f.winfo_children(): w.destroy()
+            if not servers:
+                ctk.CTkLabel(scroll_f, text="No guilds available.", text_color=DIM2, font=F_BODY).pack(pady=20)
+                return
+            for s in servers:
+                row = ctk.CTkFrame(scroll_f, fg_color=BG3, corner_radius=4)
+                row.pack(fill="x", pady=3, padx=4)
+                ctk.CTkLabel(row, text=s["name"], font=F_BODY, text_color=TEXT, anchor="w").pack(side="left", padx=12, pady=8)
+                def _join(sv=s):
+                    def _do():
+                        try:
+                            res = self._guild_api("POST", f"/guild/{sv['id']}/join",
+                                                  params={"token":self._guild_session_token})
+                            grade = res.get("omt_grade","member")
+                            self.after(0, lambda: [win.destroy(),
+                                messagebox.showinfo("Joined!", f"You joined {sv['name']} as {grade}."),
+                                self._guild_render()])
+                        except RuntimeError as e:
+                            err_msg = str(e)
+                            self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                    import threading; threading.Thread(target=_do, daemon=True).start()
+                gold_btn(row, "Join", _join, w=80, h=30).pack(side="right", padx=8, pady=4)
+        import threading; threading.Thread(target=_load, daemon=True).start()
+
+    def _set_win_icon(self, win):
+        """Apply OMT icon to CTkToplevel — must use after(250) to override CTk default icon."""
+        ico_path = str(ASSETS_DIR / "O-MTSmall.ico")
+        def _apply():
+            if not win.winfo_exists(): return
+            try:
+                # Tell CTk not to override our icon
+                win._iconbitmap_method_called = True
+                win.iconbitmap(ico_path)
+            except:
+                try:
+                    if hasattr(self, "_main_icon_ph"):
+                        win.iconphoto(True, self._main_icon_ph)
+                except: pass
+        win.after(250, _apply)
 
 
 
