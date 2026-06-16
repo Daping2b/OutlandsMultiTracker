@@ -30,7 +30,7 @@ jobs:
           from datetime import datetime, timezone, timedelta
 
           SUPABASE_URL = "https://inbuomjlmfztlaknwjze.supabase.co/rest/v1/weeklyBonuses"
-          SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluYnVvbWpsbWZ6dGxha253anplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMDQ5MTgsImV4cCI6MjA5NDc4MDk1OH0.5Sxe5ApAsmzTq27z_C18IHGO55MIEVk5xahSouP1Sy0"
+          SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluYnVvbWpsbWZ6dGxha253anplIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzkyMDQ5MTgsImV4cCI6MTk5NDc4MDkxOH0.5Sxe5ApAsmzTq27z_C18lHGO55MIEVk5xahSouP1Sy0"
 
           headers = {
               "apikey":        SUPABASE_KEY,
