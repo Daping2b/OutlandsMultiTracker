@@ -133,6 +133,16 @@ BONUS_ICONS = {
     "experience": "bonus_experience.png",
 }
 
+def _expand_abbrev(s: str) -> str:
+    """Expand common Outlands dungeon name abbreviations for bonus matching."""
+    return (s.lower()
+             .replace("cath.", "cathedral")
+             .replace("cath ",  "cathedral ")
+             .replace("cath$",  "cathedral")
+             .strip())
+
+
+
 CAT_ICONS = {
     "Gold & Currency":"💰","Unidentified Items":"📜","Maps":"🗺",
     "Logs":"🪵","Ores":"⛏","Ingots":"🔩","Boards":"🪚","Leather":"🐾",
@@ -832,7 +842,7 @@ class App(ctk.CTk):
             return None
         base = re.sub(r'\s+Lv-\d+$', '', location).strip()
         for k, v in bonuses.items():
-            if k.lower() in base.lower() or base.lower() in k.lower():
+            if _expand_abbrev(k) in _expand_abbrev(base) or _expand_abbrev(base) in _expand_abbrev(k):
                 return v
         return None
 
@@ -1440,6 +1450,13 @@ class App(ctk.CTk):
         gold_btn(top,"⟳  LOAD LOGS",self._load_logs,w=155,h=36).pack(side="left",padx=10,pady=9)
         self._path_lbl(top).pack(side="left",padx=4)
         ctk.CTkButton(top,text="…",width=32,height=30,fg_color=BG4,border_color=BORDER,border_width=1,command=self._set_path).pack(side="left")
+        # Upload All Guild Sessions checkbox
+        self._upload_all_var = tk.BooleanVar(value=self.settings.get("guild_upload_all", False))
+        ctk.CTkCheckBox(top, text="Upload All to Guild",
+                         variable=self._upload_all_var,
+                         font=F_SMALL, text_color=DIM,
+                         checkmark_color=GOLD, fg_color=ACCENT2, border_color=BORDER,
+                         command=self._on_upload_all_toggle).pack(side="right", padx=12)
 
         body=ctk.CTkFrame(page,fg_color=BG,corner_radius=0); body.pack(fill="both",expand=True,padx=6,pady=6)
         body.columnconfigure(1,weight=1); body.rowconfigure(0,weight=1)
@@ -1501,7 +1518,7 @@ class App(ctk.CTk):
                 if base not in seen:
                     bonus = None
                     for k,v in current_bonuses.items():
-                        if k.lower() in base.lower() or base.lower() in k.lower():
+                        if _expand_abbrev(k) in _expand_abbrev(base) or _expand_abbrev(base) in _expand_abbrev(k):
                             bonus = v; break
                     try:
                         bonus_val = float(bonus.get("value","0").replace("%","").replace("+","").strip()) if bonus else 0
@@ -1650,6 +1667,7 @@ class App(ctk.CTk):
     COL_GAP = 4
     COLS=[
         ("",         "",           None,                               40),
+        ("upload",   "Upload",     "gupload.png",                     44),
         ("player",   "Player",     "woodenshield.png",                100),
         ("type",     "Type",       "tinkering_globe.png",             155),
         ("date",     "Date",       "carpentrycraftingmanual.png",     105),
@@ -1719,6 +1737,8 @@ class App(ctk.CTk):
         ctk.CTkCheckBox(row,variable=var,text="",width=w0,height=28,
                         checkbox_width=16,checkbox_height=16,
                         checkmark_color=GOLD,fg_color=ACCENT2,border_color=BORDER).pack(side="left",padx=(gap,0))
+        # Upload button — shows guild upload state
+        self._draw_upload_cell(row, s)
         # Get bonus for this session
         sess_bonus = self._get_bonus_for_session(s)
         bonus_txt = f"{sess_bonus.get('value','')}\n{sess_bonus.get('label','')}" if sess_bonus else "—"
@@ -1736,19 +1756,19 @@ class App(ctk.CTk):
             bonus_photo = getattr(self, "_row_bonus_photos", {}).get(key)
 
         vals=[
-            (s.get("player","?"), self.COLS[1][3], False),
-            (stype,               self.COLS[2][3], True),
-            (dt,                  self.COLS[3][3], False),
-            (fmt_dur(mins),       self.COLS[4][3], False),
-            (f"{gold:,}\n({rate(gold,mins)})",    self.COLS[5][3], False),
-            (f"{doub:,}\n({rate(doub,mins)})",    self.COLS[6][3], False),
-            (f"{rare}\n({rate(rare,mins)})",       self.COLS[7][3], False),
-            (None,                                 self.COLS[8][3], False),  # bonus
-            (f"{harv:,}\n({rate(harv,mins)})",    self.COLS[9][3], False),
-            (f"{exp:,.0f}\n({rate(exp,mins)})",   self.COLS[10][3], False),
+            (s.get("player","?"), self.COLS[2][3], False),
+            (stype,               self.COLS[3][3], True),
+            (dt,                  self.COLS[4][3], False),
+            (fmt_dur(mins),       self.COLS[5][3], False),
+            (f"{gold:,}\n({rate(gold,mins)})",    self.COLS[6][3], False),
+            (f"{doub:,}\n({rate(doub,mins)})",    self.COLS[7][3], False),
+            (f"{rare}\n({rate(rare,mins)})",       self.COLS[8][3], False),
+            (None,                                 self.COLS[9][3], False),  # bonus
+            (f"{harv:,}\n({rate(harv,mins)})",    self.COLS[10][3], False),
+            (f"{exp:,.0f}\n({rate(exp,mins)})",   self.COLS[11][3], False),
         ]
         for i,(text,cw,wrap) in enumerate(vals):
-            if i == 7:
+            if i == 8:
                 # Bonus cell — icon if available, text fallback
                 cell = ctk.CTkFrame(row, fg_color="transparent", width=cw, height=28)
                 cell.pack(side="left", padx=(gap,0), pady=2)
@@ -1899,6 +1919,9 @@ class App(ctk.CTk):
             self.xp_db["events"]=self._ser_xp(self.xp_events)
             save_json(XP_F,self.xp_db)
             total_s=len(self.sessions)
+            # Auto-upload new sessions if Upload All is enabled
+            if new_s and self._guild_session_token and self.settings.get("guild_upload_all"):
+                self.after(500, self._guild_upload_all)
             self.after(0,lambda ns=len(new_s),ts=total_s,tf=len(files):self._load_done(modal,ns,ts,tf))
         threading.Thread(target=do_load,daemon=True).start()
 
@@ -2512,6 +2535,9 @@ class App(ctk.CTk):
             _nav_btn(nav, "  \U0001f465  Members",
                      lambda gid=guild_id: self._guild_show_members(gid),
                      f"members_{guild_id}")
+            _nav_btn(nav, "  \U0001f4cb  Sessions",
+                     lambda gid=guild_id: self._guild_show_sessions(gid),
+                     f"sessions_{guild_id}")
 
         # Personal section
         ctk.CTkFrame(nav, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(12,2))
@@ -2851,6 +2877,47 @@ class App(ctk.CTk):
             # Build Grade System
             _render_grade_system()
 
+            # ── Sessions admin section ───────────────────────────────────────
+            sess_outer = ctk.CTkFrame(self._guild_content, fg_color=BG2, corner_radius=6)
+            sess_outer.pack(fill="x", padx=16, pady=(4,4))
+            sess_hdr = ctk.CTkFrame(sess_outer, fg_color=BG3, corner_radius=4)
+            sess_hdr.pack(fill="x")
+            ctk.CTkLabel(sess_hdr, text="  📋  Sessions",
+                         font=F_BODY_B, text_color=GOLD, anchor="w").pack(side="left", padx=10, pady=6)
+            sess_body = ctk.CTkFrame(sess_outer, fg_color="transparent")
+            sess_body.pack(fill="x", padx=10, pady=(4,8))
+            ctk.CTkLabel(sess_body, text="Delete all sessions from user:",
+                         font=F_SMALL, text_color=DIM, anchor="w").pack(anchor="w", pady=(0,4))
+            # Load member list for dropdown
+            members_for_del = [m["username"] for m in g.get("members",[])]
+            members_ids_map  = {m["username"]: m["user_id"] for m in g.get("members",[])}
+            del_user_var = tk.StringVar(value=members_for_del[0] if members_for_del else "")
+            del_row = ctk.CTkFrame(sess_body, fg_color="transparent"); del_row.pack(fill="x")
+            ctk.CTkOptionMenu(del_row, values=members_for_del, variable=del_user_var,
+                              fg_color=BG4, button_color=GOLD_DK,
+                              text_color=TEXT, font=F_SMALL, width=200).pack(side="left", padx=(0,8))
+            def _del_user_sessions():
+                uname = del_user_var.get()
+                uid   = members_ids_map.get(uname)
+                if not uid: return
+                if not messagebox.askyesno("Delete Sessions",
+                    f"Delete ALL sessions from {uname}?\nThis cannot be undone."): return
+                def _do():
+                    try:
+                        self._guild_api("DELETE", f"/guild/{guild_id}/sessions/user/{uid}",
+                                        params={"token": self._guild_session_token})
+                        if hasattr(self, "_members_cache"): self._members_cache.pop(guild_id, None)
+                        self.after(0, lambda: messagebox.showinfo("Done", f"Sessions from {uname} deleted."))
+                    except RuntimeError as e:
+                        err_msg = str(e)
+                        self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                import threading
+                threading.Thread(target=_do, daemon=True).start()
+            ctk.CTkButton(del_row, text="🗑 Delete Sessions", width=140, height=30,
+                          fg_color="#8b0000", hover_color=RED, text_color="white",
+                          font=F_SMALL, corner_radius=4,
+                          command=_del_user_sessions).pack(side="left")
+
             # ── Bottom bar: Save + Delete ────────────────────────────────────
             bot_bar = ctk.CTkFrame(self._guild_content, fg_color=BG2, height=52, corner_radius=0)
             bot_bar.pack(fill="x", side="bottom"); bot_bar.pack_propagate(False)
@@ -3090,6 +3157,393 @@ class App(ctk.CTk):
         _, content, _ = make_scrollable(win, bg=BG2)
         ctk.CTkLabel(content, text="Select a category above.",
                      text_color=DIM2, font=F_BODY).pack(pady=30)
+
+    def _on_upload_all_toggle(self):
+        """Handle Upload All Guild Sessions checkbox toggle."""
+        val = self._upload_all_var.get()
+        self.settings["guild_upload_all"] = val
+        save_json(SETTINGS_F, self.settings)
+        if val and self._guild_session_token:
+            if messagebox.askyesno("Upload All",
+                f"Upload all {len(self.sessions)} sessions to guild now?"):
+                self._guild_upload_all()
+
+    # ── Session Upload helpers ─────────────────────────────────────────────────
+    def _draw_upload_cell(self, row, s):
+        """Draw upload icon button for a session row."""
+        cw   = self.COLS[1][3]
+        gap  = self.COL_GAP
+        cell = ctk.CTkFrame(row, fg_color="transparent", width=cw, height=28)
+        cell.pack(side="left", padx=(gap,0)); cell.pack_propagate(False)
+        # Determine upload state
+        s_start = s.get("start","")
+        if hasattr(s_start, "isoformat"): s_start = s_start.isoformat()
+        uploaded = s_start in getattr(self, "_guild_uploaded_starts", set())
+        # Load icon
+        if not hasattr(self, "_gupload_ph"):
+            ph = load_pil("gupload.png", (24,24), transparent=True)
+            self._gupload_ph = ImageTk.PhotoImage(ph) if ph else None
+            if self._gupload_ph: self._keep(self._gupload_ph)
+        ico = self._gupload_ph
+        color = GOLD if uploaded else DIM2
+        btn = ctk.CTkButton(cell, image=ico if ico else None,
+                             text="" if ico else "↑",
+                             width=cw-4, height=24,
+                             fg_color="transparent",
+                             text_color=color,
+                             hover_color=BG4,
+                             command=lambda sv=s_start, sess=s, b=None: self._toggle_upload(sv, sess))
+        btn.pack(expand=True)
+        # Store ref for state refresh
+        if not hasattr(self, "_upload_btns"): self._upload_btns = {}
+        self._upload_btns[s_start] = (btn, uploaded)
+
+    def _toggle_upload(self, session_start: str, sess: dict):
+        """Toggle upload state for a single session."""
+        memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+        if not memberships: return
+        guild_id = memberships[0]["guild_id"]
+        uploaded = session_start in getattr(self, "_guild_uploaded_starts", set())
+        import threading
+        if uploaded:
+            def _del():
+                try:
+                    import urllib.parse
+                    self._guild_api("DELETE", f"/guild/{guild_id}/sessions/my/{urllib.parse.quote(session_start, safe='')}",
+                                    params={"token": self._guild_session_token})
+                    self._guild_uploaded_starts.discard(session_start)
+                    # Invalidate members cache
+                    if hasattr(self, "_members_cache"): self._members_cache.pop(guild_id, None)
+                    self.after(0, self._refresh)
+                except: pass
+            threading.Thread(target=_del, daemon=True).start()
+        else:
+            # Serialize and upload
+            ser = dict(sess)
+            if hasattr(ser.get("start"), "isoformat"): ser["start"] = ser["start"].isoformat()
+            if hasattr(ser.get("end"),   "isoformat"): ser["end"]   = ser["end"].isoformat()
+            def _up():
+                try:
+                    self._guild_api("POST", f"/guild/{guild_id}/sessions/upload",
+                                    params={"token": self._guild_session_token},
+                                    body={"sessions": [ser]})
+                    if not hasattr(self, "_guild_uploaded_starts"):
+                        self._guild_uploaded_starts = set()
+                    self._guild_uploaded_starts.add(session_start)
+                    if hasattr(self, "_members_cache"): self._members_cache.pop(guild_id, None)
+                    self.after(0, self._refresh)
+                except: pass
+            threading.Thread(target=_up, daemon=True).start()
+
+    def _guild_sync_uploads(self):
+        """Sync which sessions are uploaded — call once at startup if in a guild."""
+        memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+        if not self._guild_session_token or not memberships: return
+        guild_id = memberships[0]["guild_id"]
+        import threading
+        def _fetch():
+            try:
+                data = self._guild_api("GET", f"/guild/{guild_id}/sessions/my-uploads",
+                                       params={"token": self._guild_session_token})
+                self._guild_uploaded_starts = set(data.get("uploaded", []))
+            except: pass
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _guild_upload_all(self):
+        """Upload all current sessions to guild."""
+        memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+        if not memberships: return
+        guild_id = memberships[0]["guild_id"]
+        serialized = []
+        for s in self.sessions:
+            ser = dict(s)
+            if hasattr(ser.get("start"), "isoformat"): ser["start"] = ser["start"].isoformat()
+            if hasattr(ser.get("end"),   "isoformat"): ser["end"]   = ser["end"].isoformat()
+            serialized.append(ser)
+        import threading
+        def _up():
+            try:
+                # Upload in batches of 50
+                for i in range(0, len(serialized), 50):
+                    batch = serialized[i:i+50]
+                    r = self._guild_api("POST", f"/guild/{guild_id}/sessions/upload",
+                                        params={"token": self._guild_session_token},
+                                        body={"sessions": batch})
+                uploaded = {s.get("start","") for s in serialized if s.get("start")}
+                self._guild_uploaded_starts = uploaded
+                if hasattr(self, "_members_cache"): self._members_cache.pop(guild_id, None)
+                self.after(0, lambda: messagebox.showinfo(
+                    "Upload All", f"Uploaded {len(serialized)} sessions to guild."))
+                self.after(0, self._refresh)
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+        threading.Thread(target=_up, daemon=True).start()
+
+    # ── Guild Sessions page ────────────────────────────────────────────────────
+    def _guild_show_sessions(self, guild_id: str):
+        """Main guild sessions view — all members' sessions newest first."""
+        self._guild_content_loading("  📋  Sessions")
+        import threading, json as _json
+        from datetime import datetime
+
+        def _load():
+            try:
+                data = self._guild_api("GET", f"/guild/{guild_id}/sessions",
+                                       params={"token": self._guild_session_token, "limit": "200"})
+                self.after(0, lambda: _render(data))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: ctk.CTkLabel(
+                    self._guild_content, text=f"Error: {msg}",
+                    text_color=RED, font=F_BODY).pack(padx=16, pady=8))
+
+        def _render(data):
+            for w in self._guild_content.winfo_children(): w.destroy()
+            # Header
+            hdr = ctk.CTkFrame(self._guild_content, fg_color="transparent")
+            hdr.pack(fill="x", padx=16, pady=(10,4))
+            ctk.CTkLabel(hdr, text="  📋  Sessions",
+                         font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(side="left")
+            gold_btn(hdr, "🏆 Top Sessions",
+                     lambda: self._guild_show_top(guild_id),
+                     w=140, h=32).pack(side="right")
+            ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,4))
+
+            sessions = data.get("sessions", [])
+            total    = data.get("total", 0)
+            ctk.CTkLabel(self._guild_content,
+                         text=f"  {total} sessions",
+                         font=F_SMALL, text_color=DIM2, anchor="w").pack(fill="x", padx=16)
+
+            scroll = ctk.CTkScrollableFrame(self._guild_content, fg_color="transparent")
+            scroll.pack(fill="both", expand=True, padx=8, pady=4)
+
+            # Column headers
+            hrow = ctk.CTkFrame(scroll, fg_color=BG3, corner_radius=4)
+            hrow.pack(fill="x", pady=(0,2))
+            for col, w in [("Player",100),("Character",90),("Type",120),
+                           ("Date",90),("Dur",60),("Gold",90),
+                           ("Doublons",90),("Rare",70),("Bonus",80),
+                           ("Harvest",80),("XP",80),("",40)]:
+                ctk.CTkLabel(hrow, text=col, width=w, font=F_SMALL,
+                             text_color=GOLD, justify="center").pack(side="left", padx=2)
+
+            is_lo = is_leader_or_officer = False
+            memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+            for m in memberships:
+                if m["guild_id"] == guild_id and m["omt_grade"] in ("leader","officer"):
+                    is_lo = True; break
+
+            for i, s in enumerate(sessions):
+                self._guild_draw_session_row(scroll, s, guild_id, is_lo, i,
+                                              on_click_player=lambda uid=s["user_id"], uname=s["username"]:
+                                              self._guild_show_player_sessions(guild_id, uid, uname))
+
+        threading.Thread(target=_load, daemon=True).start()
+
+    def _guild_draw_session_row(self, parent, s: dict, guild_id: str,
+                                 can_delete: bool, idx: int, on_click_player=None):
+        """Draw one session row in the guild sessions view."""
+        from datetime import datetime
+        data  = s.get("data", {})
+        bg    = ROW_A if idx % 2 == 0 else ROW_B
+        row   = ctk.CTkFrame(parent, fg_color=bg, corner_radius=3)
+        row.pack(fill="x", pady=1)
+
+        # Compute values
+        def _gold(d):
+            return sum(q for c,items in d.get("loots",{}).items()
+                       if c=="Gold & Currency"
+                       for n,q in items.items() if "gold" in n.lower())
+        def _doub(d):
+            return sum(q for c,items in d.get("loots",{}).items()
+                       if c=="Gold & Currency"
+                       for n,q in items.items() if "doubloon" in n.lower())
+        def _rare(d):
+            return sum(len(items) for c,items in d.get("loots",{}).items()
+                       if c not in ("Gold & Currency","Harvesting"))
+        def _harv(d):
+            return sum(q for c,items in d.get("loots",{}).items()
+                       if c=="Harvesting" for _,q in items.items())
+        def _exp(d):  return sum(d.get("aspects_gained",{}).values())
+        def _mins(d):
+            try:
+                s2 = datetime.fromisoformat(d.get("start",""))
+                e2 = datetime.fromisoformat(d.get("end",""))
+                return max(1, (e2-s2).total_seconds()/60)
+            except: return 1
+
+        mins   = _mins(data)
+        gold   = _gold(data); doub = _doub(data)
+        rare   = _rare(data); harv = _harv(data); exp = _exp(data)
+        dt_str = data.get("start","")[:10] if data.get("start") else "—"
+        char   = data.get("player","?")
+        stype  = data.get("type","—")
+        dur    = f"{int(mins)}m"
+
+        def _r(v): return f"{v/max(1,mins)*60:,.0f}/h"
+
+        # Player name — clickable
+        player_btn = ctk.CTkButton(row, text=s.get("username","?"),
+                                    width=100, height=26, anchor="w",
+                                    fg_color="transparent", text_color=GOLD_LT,
+                                    hover_color=BG4, font=F_SMALL,
+                                    command=on_click_player)
+        player_btn.pack(side="left", padx=2)
+
+        for text, w in [
+            (char[:12],  90), (stype[:16], 120), (dt_str, 90), (dur, 60),
+            (f"{gold:,}\n({_r(gold)})", 90),
+            (f"{doub:,}\n({_r(doub)})", 90),
+            (f"{rare}", 70), ("—", 80),
+            (f"{harv:,}", 80),
+            (f"{exp:,.0f}", 80),
+        ]:
+            ctk.CTkLabel(row, text=text, width=w, font=F_SMALL,
+                         text_color=TEXT, justify="center").pack(side="left", padx=2)
+
+        # Delete button for leaders/officers
+        if can_delete:
+            def _del(sid=s["id"]):
+                if not messagebox.askyesno("Delete", "Delete this session?"): return
+                import threading
+                def _do():
+                    try:
+                        self._guild_api("DELETE", f"/guild/{guild_id}/sessions/{sid}",
+                                        params={"token": self._guild_session_token})
+                        self.after(0, lambda: self._guild_show_sessions(guild_id))
+                    except RuntimeError as e:
+                        err_msg = str(e)
+                        self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+                threading.Thread(target=_do, daemon=True).start()
+            ctk.CTkButton(row, text="🗑", width=36, height=26,
+                          fg_color="transparent", text_color=RED,
+                          hover_color=BG4, font=F_SMALL,
+                          command=_del).pack(side="right", padx=2)
+
+    def _guild_show_player_sessions(self, guild_id: str, user_id: str, username: str):
+        """Show all sessions for a specific player — with back button."""
+        self._guild_content_loading(f"  👤  {username}")
+        import threading
+
+        def _load():
+            try:
+                data = self._guild_api("GET", f"/guild/{guild_id}/sessions",
+                                       params={"token": self._guild_session_token,
+                                               "user_id": user_id, "limit": "200"})
+                self.after(0, lambda: _render(data))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: ctk.CTkLabel(
+                    self._guild_content, text=f"Error: {msg}",
+                    text_color=RED, font=F_BODY).pack(padx=16, pady=8))
+
+        def _render(data):
+            for w in self._guild_content.winfo_children(): w.destroy()
+            # Back button
+            hdr = ctk.CTkFrame(self._guild_content, fg_color="transparent")
+            hdr.pack(fill="x", padx=16, pady=(10,4))
+            dim_btn(hdr, "← Back", lambda: self._guild_show_sessions(guild_id),
+                    w=90, h=30).pack(side="left")
+            ctk.CTkLabel(hdr, text=f"  👤  {username}",
+                         font=F_HEAD, text_color=GOLD_LT).pack(side="left", padx=12)
+            ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,4))
+
+            sessions = data.get("sessions", [])
+            ctk.CTkLabel(self._guild_content,
+                         text=f"  {len(sessions)} sessions",
+                         font=F_SMALL, text_color=DIM2, anchor="w").pack(fill="x", padx=16)
+
+            scroll = ctk.CTkScrollableFrame(self._guild_content, fg_color="transparent")
+            scroll.pack(fill="both", expand=True, padx=8, pady=4)
+
+            is_lo = False
+            memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+            for m in memberships:
+                if m["guild_id"] == guild_id and m["omt_grade"] in ("leader","officer"):
+                    is_lo = True; break
+
+            for i, s in enumerate(sessions):
+                self._guild_draw_session_row(scroll, s, guild_id, is_lo, i,
+                                              on_click_player=None)
+
+        threading.Thread(target=_load, daemon=True).start()
+
+    def _guild_show_top(self, guild_id: str):
+        """Top Sessions window — Top 10 global + Top 5 per location."""
+        win = ctk.CTkToplevel(self)
+        win.title("Top Sessions"); win.geometry("820x600")
+        win.configure(fg_color=BG); win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        self._set_win_icon(win)
+        ctk.CTkLabel(win, text="🏆  Top Sessions",
+                     font=("Georgia",16,"bold"), text_color=GOLD_LT).pack(pady=(14,4))
+        ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=20, pady=(0,8))
+        status = ctk.CTkLabel(win, text="Loading...", text_color=DIM2, font=F_BODY)
+        status.pack(pady=4)
+        import threading
+
+        def _load():
+            try:
+                data = self._guild_api("GET", f"/guild/{guild_id}/sessions/top",
+                                       params={"token": self._guild_session_token})
+                self.after(0, lambda: _render(data))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: status.configure(
+                    text=f"Error: {msg}", text_color=RED))
+
+        def _draw_top_row(parent, rank: int, s: dict):
+            from datetime import datetime
+            data  = s.get("data",{})
+            score = s.get("score",0)
+            row   = ctk.CTkFrame(parent, fg_color=BG2 if rank%2==0 else BG3, corner_radius=4)
+            row.pack(fill="x", pady=1, padx=4)
+            medal = {1:"🥇",2:"🥈",3:"🥉"}.get(rank, f"#{rank}")
+            ctk.CTkLabel(row, text=medal, width=36, font=F_BODY, text_color=GOLD).pack(side="left", padx=6)
+            ctk.CTkLabel(row, text=s.get("username","?"), width=110,
+                         font=F_SMALL_B, text_color=GOLD_LT, anchor="w").pack(side="left", padx=2)
+            ctk.CTkLabel(row, text=data.get("player","?"), width=90,
+                         font=F_SMALL, text_color=TEXT, anchor="w").pack(side="left", padx=2)
+            ctk.CTkLabel(row, text=data.get("location","—"), width=140,
+                         font=F_SMALL, text_color=DIM, anchor="w").pack(side="left", padx=2)
+            ctk.CTkLabel(row, text=f"{score:,.0f} gp/h", width=100,
+                         font=F_SMALL_B, text_color=GOLD, anchor="e").pack(side="right", padx=8)
+            dt_str = (data.get("start","")[:10]) if data.get("start") else "—"
+            ctk.CTkLabel(row, text=dt_str, width=90,
+                         font=F_SMALL, text_color=DIM2).pack(side="right", padx=4)
+
+        def _render(data):
+            status.pack_forget()
+            nb = ctk.CTkTabview(win, fg_color=BG2,
+                                segmented_button_fg_color=BG3,
+                                segmented_button_selected_color=GOLD_DK,
+                                segmented_button_selected_hover_color=GOLD,
+                                text_color=TEXT)
+            nb.pack(fill="both", expand=True, padx=16, pady=4)
+            t_global = nb.add("🌍 Global Top 10")
+            t_local  = nb.add("📍 By Location")
+
+            # Global top 10
+            sf_g = ctk.CTkScrollableFrame(t_global, fg_color="transparent")
+            sf_g.pack(fill="both", expand=True)
+            ctk.CTkLabel(sf_g, text="  Gold + Doublons / hour",
+                         font=F_SMALL, text_color=DIM2, anchor="w").pack(fill="x", padx=8, pady=2)
+            for i, s in enumerate(data.get("top_global",[]), 1):
+                _draw_top_row(sf_g, i, s)
+
+            # By location
+            sf_l = ctk.CTkScrollableFrame(t_local, fg_color="transparent")
+            sf_l.pack(fill="both", expand=True)
+            for loc, sessions in data.get("top_by_location",{}).items():
+                ctk.CTkLabel(sf_l, text=f"  📍 {loc}",
+                             font=F_BODY_B, text_color=GOLD, anchor="w").pack(fill="x", padx=8, pady=(8,2))
+                ctk.CTkFrame(sf_l, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(0,2))
+                for i, s in enumerate(sessions, 1):
+                    _draw_top_row(sf_l, i, s)
+
+        threading.Thread(target=_load, daemon=True).start()
 
     def _guild_logout(self):
         try:
