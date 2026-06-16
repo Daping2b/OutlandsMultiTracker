@@ -35,5 +35,11 @@
       "type": "crafting",
       "label": "Exceptional Crafting"
     }
+  },
+  "2026-06-13": {
+    "id": 1,
+    "Bonus": "Sanctuary Dungeon",
+    "Location": "Inferno",
+    "LastUpdated": "2026-06-13T00:00:21.511+00:00"
   }
 }
