@@ -9,6 +9,8 @@ on:
 jobs:
   fetch-bonuses:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,8 +28,8 @@ jobs:
       - name: Fetch bonuses from Outlands Butler
         run: |
           python3 << 'PYEOF'
-          import requests, json, sys
-          from datetime import datetime, timezone, timedelta
+          import requests, json, re, sys
+          from datetime import datetime, timedelta
 
           SUPABASE_URL = "https://inbuomjlmfztlaknwjze.supabase.co/rest/v1/weeklyBonuses"
           SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluYnVvbWpsbWZ6dGxha253anplIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzkyMDQ5MTgsImV4cCI6MTk5NDc4MDkxOH0.5Sxe5ApAsmzTq27z_C18lHGO55MIEVk5xahSouP1Sy0"
@@ -49,8 +51,64 @@ jobs:
           rows = r.json()
           print(f"Fetched {len(rows)} rows from Supabase")
           if not rows:
-              print("No data returned")
-              sys.exit(1)
+              print("No data returned"); sys.exit(1)
+
+          # Supabase format per row:
+          # {"id": 1, "Bonus": "Sanctuary Dungeon", "Location": "Inferno",
+          #  "LastUpdated": "2026-06-13T00:00:21.511+00:00"}
+          # OMT format:
+          # {"2026-06-13": {"Inferno": {"value": "+25%", "type": "sanctuary", "label": "Sanctuary Dungeon"}}}
+
+          bonus_type_map = {
+              "sanctuary dungeon": "sanctuary",
+              "challenger dungeon": "challenger",
+              "faster respawn":     "respawn",
+              "gold loot":          "gold_loot",
+              "experience":         "experience",
+              "vendor rebate":      "vendor",
+              "exceptional crafting":"crafting",
+          }
+
+          def get_week_key(dt):
+              days_since_sat = (dt.weekday() + 2) % 7
+              return (dt - timedelta(days=days_since_sat)).strftime("%Y-%m-%d")
+
+          def parse_bonus_type(bonus_str):
+              bl = bonus_str.lower()
+              for k, v in bonus_type_map.items():
+                  if k in bl: return v
+              return "unknown"
+
+          # Group rows by week
+          weeks = {}
+          for row in rows:
+              last_updated = row.get("LastUpdated","")
+              try:
+                  dt = datetime.fromisoformat(str(last_updated).replace("Z","+00:00")).replace(tzinfo=None)
+                  week_key = get_week_key(dt)
+              except:
+                  week_key = get_week_key(datetime.utcnow())
+
+              location = row.get("Location","Unknown")
+              bonus    = row.get("Bonus","")
+
+              # Parse value from bonus string e.g. "+25% Faster Respawn" or "Sanctuary Dungeon"
+              value_match = re.match(r'^([+-][\d.]+%)\s+(.+)$', bonus)
+              if value_match:
+                  value = value_match.group(1)
+                  label = value_match.group(2)
+              else:
+                  # No value prefix — dungeon type bonus (no % value)
+                  value = ""
+                  label = bonus
+
+              btype = parse_bonus_type(label)
+
+              if week_key not in weeks:
+                  weeks[week_key] = {}
+              weeks[week_key][location] = {"value": value, "type": btype, "label": label}
+
+          print(f"Parsed {len(weeks)} weeks: {list(weeks.keys())}")
 
           bonuses_path = "config/bonuses.json"
           try:
@@ -59,39 +117,29 @@ jobs:
           except:
               bonuses = {}
 
-          def get_week_key(dt):
-              days_since_sat = (dt.weekday() + 2) % 7
-              return (dt - timedelta(days=days_since_sat)).strftime("%Y-%m-%d")
-
           new_entries = 0
-          for row in rows:
-              print(f"Row keys: {list(row.keys())} — sample: {str(row)[:200]}")
-              # Adapt key mapping based on actual column names
-              week_date = row.get("week_start") or row.get("weekStart") or row.get("date") or row.get("created_at","")
-              try:
-                  dt = datetime.fromisoformat(str(week_date).replace("Z","+00:00"))
-                  week_key = get_week_key(dt.replace(tzinfo=None))
-              except:
-                  week_key = get_week_key(datetime.utcnow())
-
-              if week_key in bonuses:
-                  print(f"Week {week_key} already present, skipping")
-                  continue
-
-              bonuses[week_key] = row
-              new_entries += 1
-              print(f"Added week {week_key}")
+          for week_key, week_data in weeks.items():
+              if week_key not in bonuses:
+                  bonuses[week_key] = week_data
+                  new_entries += 1
+                  print(f"Added week {week_key}: {list(week_data.keys())}")
+              else:
+                  # Update existing week with any new locations
+                  for loc, data in week_data.items():
+                      if loc not in bonuses[week_key]:
+                          bonuses[week_key][loc] = data
+                  print(f"Week {week_key} already present, checked for updates")
 
           if new_entries == 0:
-              print("No new weeks to add")
-              now = datetime.utcnow()
-              if get_week_key(now) not in bonuses:
-                  print("Current week still missing — retrying")
+              current_week = get_week_key(datetime.utcnow())
+              if current_week not in bonuses:
+                  print(f"Current week {current_week} missing — will retry")
                   sys.exit(1)
-          else:
-              with open(bonuses_path, "w") as f:
-                  json.dump(bonuses, f, indent=2, ensure_ascii=False)
-              print(f"Saved {len(bonuses)} weeks to bonuses.json")
+              print("No new weeks to add")
+          
+          with open(bonuses_path, "w") as f:
+              json.dump(bonuses, f, indent=2, ensure_ascii=False)
+          print(f"Saved bonuses.json with {len(bonuses)} weeks")
           PYEOF
 
       - name: Commit bonuses
