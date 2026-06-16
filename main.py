@@ -723,8 +723,8 @@ class App(ctk.CTk):
         self._act_f     = "All"
         self._char_f    = "All"
         self._photos    = []
-        self._sort_col  = None
-        self._sort_rev  = False
+        self._sort_col  = "date"
+        self._sort_rev  = True
         self._build()
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         if not self.settings.get("uo_root_path"):
@@ -801,15 +801,20 @@ class App(ctk.CTk):
             print(f"[BONUS] Fetch failed: {e}")
 
     def _get_current_bonuses(self):
-        """Return bonus dict for the current week. Fallback to most recent week."""
+        """Return bonus dict for the current week. Supports both YYYY-WXX and YYYY-MM-DD key formats."""
         if not self.bonuses_db:
             return {}
         today = datetime.utcnow().date()
-        # ISO week key: "YYYY-WXX"
+        # Try ISO week format first (legacy)
         week_key = today.strftime("%G-W%V")
         if week_key in self.bonuses_db:
             return self.bonuses_db[week_key]
-        # Fallback: use the most recent available week
+        # Try YYYY-MM-DD format (new — Saturday of current week)
+        days_since_sat = (today.weekday() + 2) % 7
+        sat_key = (today - __import__('datetime').timedelta(days=days_since_sat)).strftime("%Y-%m-%d")
+        if sat_key in self.bonuses_db:
+            return self.bonuses_db[sat_key]
+        # Fallback: most recent week
         try:
             latest_key = max(self.bonuses_db.keys())
             return self.bonuses_db[latest_key]
@@ -817,30 +822,37 @@ class App(ctk.CTk):
             return {}
 
     def _get_bonus_for_session(self, s):
-        """Return bonus dict for a session based on its location and week, or None."""
+        """Return bonus dict for a session based on its location and week.
+        Supports YYYY-WXX (legacy) and YYYY-MM-DD (new) key formats — retroactive."""
         if not self.bonuses_db:
             return None
         location = s.get("location")
         if not location:
             return None
-        # Get week key from session start date
+        base = re.sub(r'\s+Lv-\d+$', '', location).strip()
         start = s.get("start")
+        bonuses = None
         if start:
             try:
-                week_key = start.strftime("%G-W%V")
+                import datetime as _dt
+                # Try ISO week key (legacy format)
+                week_key_iso = start.strftime("%G-W%V")
+                if week_key_iso in self.bonuses_db:
+                    bonuses = self.bonuses_db[week_key_iso]
+                else:
+                    # Try YYYY-MM-DD key (new format — Saturday of the session's week)
+                    sd = start.date() if hasattr(start, 'date') else start
+                    days_since_sat = (sd.weekday() + 2) % 7
+                    sat_key = (sd - _dt.timedelta(days=days_since_sat)).strftime("%Y-%m-%d")
+                    if sat_key in self.bonuses_db:
+                        bonuses = self.bonuses_db[sat_key]
             except Exception:
-                week_key = None
-        else:
-            week_key = None
-        # Try session's own week first, then current week, then latest
-        bonuses = None
-        if week_key and week_key in self.bonuses_db:
-            bonuses = self.bonuses_db[week_key]
-        else:
+                pass
+        # Fallback: current week bonuses
+        if not bonuses:
             bonuses = self._get_current_bonuses()
         if not bonuses:
             return None
-        base = re.sub(r'\s+Lv-\d+$', '', location).strip()
         for k, v in bonuses.items():
             if _expand_abbrev(k) in _expand_abbrev(base) or _expand_abbrev(base) in _expand_abbrev(k):
                 return v
@@ -1480,6 +1492,7 @@ class App(ctk.CTk):
         frow=ctk.CTkFrame(right,fg_color=BG3,height=48,corner_radius=0); frow.pack(fill="x")
         self._get_from,self._get_to=date_row(frow,self._refresh,self._all_time_log)
         dim_btn(frow,"🗑 Delete",self._delete_selected,w=95).pack(side="right",padx=2)
+        dim_btn(frow,"📤 Upload Guild",self._upload_selected_to_guild,w=130).pack(side="right",padx=2)
         dim_btn(frow,"Export CSV",self._bulk_csv,w=105).pack(side="right",padx=2)
         dim_btn(frow,"Copy Discord",self._bulk_discord,w=118).pack(side="right",padx=4)
 
@@ -1667,7 +1680,6 @@ class App(ctk.CTk):
     COL_GAP = 4
     COLS=[
         ("",         "",           None,                               40),
-        ("upload",   "Upload",     "gupload.png",                     44),
         ("player",   "Player",     "woodenshield.png",                100),
         ("type",     "Type",       "tinkering_globe.png",             155),
         ("date",     "Date",       "carpentrycraftingmanual.png",     105),
@@ -1737,8 +1749,6 @@ class App(ctk.CTk):
         ctk.CTkCheckBox(row,variable=var,text="",width=w0,height=28,
                         checkbox_width=16,checkbox_height=16,
                         checkmark_color=GOLD,fg_color=ACCENT2,border_color=BORDER).pack(side="left",padx=(gap,0))
-        # Upload button — shows guild upload state
-        self._draw_upload_cell(row, s)
         # Get bonus for this session
         sess_bonus = self._get_bonus_for_session(s)
         bonus_txt = f"{sess_bonus.get('value','')}\n{sess_bonus.get('label','')}" if sess_bonus else "—"
@@ -1756,19 +1766,19 @@ class App(ctk.CTk):
             bonus_photo = getattr(self, "_row_bonus_photos", {}).get(key)
 
         vals=[
-            (s.get("player","?"), self.COLS[2][3], False),
-            (stype,               self.COLS[3][3], True),
-            (dt,                  self.COLS[4][3], False),
-            (fmt_dur(mins),       self.COLS[5][3], False),
-            (f"{gold:,}\n({rate(gold,mins)})",    self.COLS[6][3], False),
-            (f"{doub:,}\n({rate(doub,mins)})",    self.COLS[7][3], False),
-            (f"{rare}\n({rate(rare,mins)})",       self.COLS[8][3], False),
-            (None,                                 self.COLS[9][3], False),  # bonus
-            (f"{harv:,}\n({rate(harv,mins)})",    self.COLS[10][3], False),
-            (f"{exp:,.0f}\n({rate(exp,mins)})",   self.COLS[11][3], False),
+            (s.get("player","?"), self.COLS[1][3], False),
+            (stype,               self.COLS[2][3], True),
+            (dt,                  self.COLS[3][3], False),
+            (fmt_dur(mins),       self.COLS[4][3], False),
+            (f"{gold:,}\n({rate(gold,mins)})",    self.COLS[5][3], False),
+            (f"{doub:,}\n({rate(doub,mins)})",    self.COLS[6][3], False),
+            (f"{rare}\n({rate(rare,mins)})",       self.COLS[7][3], False),
+            (None,                                 self.COLS[8][3], False),  # bonus
+            (f"{harv:,}\n({rate(harv,mins)})",    self.COLS[9][3], False),
+            (f"{exp:,.0f}\n({rate(exp,mins)})",   self.COLS[10][3], False),
         ]
         for i,(text,cw,wrap) in enumerate(vals):
-            if i == 8:
+            if i == 7:
                 # Bonus cell — icon if available, text fallback
                 cell = ctk.CTkFrame(row, fg_color="transparent", width=cw, height=28)
                 cell.pack(side="left", padx=(gap,0), pady=2)
@@ -2766,8 +2776,8 @@ class App(ctk.CTk):
                 if not is_open: return
 
                 # Inner grades frame
-                grades_frame_inner = ctk.CTkScrollableFrame(gs_outer, fg_color="transparent")
-                grades_frame_inner.pack(fill="both", expand=True, padx=4, pady=(0,4))
+                grades_frame_inner = ctk.CTkScrollableFrame(gs_outer, fg_color="transparent", height=280)
+                grades_frame_inner.pack(fill="x", padx=4, pady=(0,4))
 
                 for ge in grades_state:
                     gk = ge["key"]
@@ -2877,17 +2887,38 @@ class App(ctk.CTk):
             # Build Grade System
             _render_grade_system()
 
-            # ── Sessions admin section ───────────────────────────────────────
-            sess_outer = ctk.CTkFrame(self._guild_content, fg_color=BG2, corner_radius=6)
+            # ── Sessions admin section — accordion ───────────────────────────────
+            sess_outer = ctk.CTkFrame(self._guild_content, fg_color="transparent")
             sess_outer.pack(fill="x", padx=16, pady=(4,4))
-            sess_hdr = ctk.CTkFrame(sess_outer, fg_color=BG3, corner_radius=4)
-            sess_hdr.pack(fill="x")
-            ctk.CTkLabel(sess_hdr, text="  📋  Sessions",
-                         font=F_BODY_B, text_color=GOLD, anchor="w").pack(side="left", padx=10, pady=6)
-            sess_body = ctk.CTkFrame(sess_outer, fg_color="transparent")
-            sess_body.pack(fill="x", padx=10, pady=(4,8))
+            sess_outer._open = False
+
+            def _render_session_system():
+                for w in sess_outer.winfo_children(): w.destroy()
+                is_open = getattr(sess_outer, "_open", False)
+                arrow   = "▼" if is_open else "▶"
+                sess_hdr = ctk.CTkFrame(sess_outer, fg_color=BG3, corner_radius=6)
+                sess_hdr.pack(fill="x")
+                ctk.CTkLabel(sess_hdr, text=f"  {arrow}  Sessions",
+                             font=F_BODY_B, text_color=GOLD, anchor="w").pack(side="left", padx=10, pady=8)
+                def _toggle_sess():
+                    sess_outer._open = not getattr(sess_outer, "_open", False)
+                    _render_session_system()
+                sess_hdr.bind("<Button-1>", lambda e: _toggle_sess())
+                if not is_open: return
+                sess_body = ctk.CTkFrame(sess_outer, fg_color=BG2, corner_radius=0)
+                sess_body.pack(fill="x", padx=2, pady=(0,2))
+            _render_session_system()
+
+            def _get_sess_body():
+                for w in sess_outer.winfo_children():
+                    if hasattr(w, 'winfo_children'):
+                        for c in w.winfo_children():
+                            if isinstance(c, ctk.CTkFrame) and c != w.winfo_children()[0]:
+                                return c
+                return None
+
             ctk.CTkLabel(sess_body, text="Delete all sessions from user:",
-                         font=F_SMALL, text_color=DIM, anchor="w").pack(anchor="w", pady=(0,4))
+                         font=F_SMALL, text_color=DIM, anchor="w").pack(anchor="w", padx=10, pady=(6,4))
             # Load member list for dropdown
             members_for_del = [m["username"] for m in g.get("members",[])]
             members_ids_map  = {m["username"]: m["user_id"] for m in g.get("members",[])}
@@ -3157,6 +3188,44 @@ class App(ctk.CTk):
         _, content, _ = make_scrollable(win, bg=BG2)
         ctk.CTkLabel(content, text="Select a category above.",
                      text_color=DIM2, font=F_BODY).pack(pady=30)
+
+    def _upload_selected_to_guild(self):
+        """Upload selected sessions to guild."""
+        if not self._guild_session_token:
+            messagebox.showwarning("Not connected", "Connect to Guild first.")
+            return
+        selected = self._selected()
+        if not selected:
+            messagebox.showwarning("No selection", "Select sessions to upload.")
+            return
+        memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+        if not memberships:
+            messagebox.showwarning("No guild", "You are not in a guild.")
+            return
+        guild_id = memberships[0]["guild_id"]
+        serialized = []
+        for s in selected:
+            ser = dict(s)
+            if hasattr(ser.get("start"), "isoformat"): ser["start"] = ser["start"].isoformat()
+            if hasattr(ser.get("end"),   "isoformat"): ser["end"]   = ser["end"].isoformat()
+            serialized.append(ser)
+        import threading
+        def _do():
+            try:
+                r = self._guild_api("POST", f"/guild/{guild_id}/sessions/upload",
+                                    params={"token": self._guild_session_token},
+                                    body={"sessions": serialized})
+                added = r.get("added", 0); skipped = r.get("skipped", 0)
+                if not hasattr(self, "_guild_uploaded_starts"):
+                    self._guild_uploaded_starts = set()
+                for s in serialized:
+                    if s.get("start"): self._guild_uploaded_starts.add(s["start"])
+                self.after(0, lambda: messagebox.showinfo(
+                    "Upload Guild", f"Uploaded {added} sessions ({skipped} already existed)."))
+            except RuntimeError as e:
+                err_msg = str(e)
+                self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
+        threading.Thread(target=_do, daemon=True).start()
 
     def _on_upload_all_toggle(self):
         """Handle Upload All Guild Sessions checkbox toggle."""
