@@ -551,7 +551,7 @@ def date_row(parent, cmd_apply, cmd_all):
                   border_color=BORDER,border_width=1,font=F_BODY,
                   command=clear).pack(side="left")
     gold_btn(row,"⏳ All Time",do_all,w=105,h=30).pack(side="left",padx=8)
-    return get_from, get_to
+    return get_from, get_to, do_all
 
 # ── Auto-updater ───────────────────────────────────────────────────────────────
 def check_for_update():
@@ -1284,7 +1284,7 @@ class App(ctk.CTk):
         # Start Log Analysis on All / All Time
         self._act_f  = "All"
         self._char_f = "All"
-        self.after(100, self._all_time_log)
+        self.after(100, lambda: self._do_all_time())
         self.update()
 
     def _show(self,name):
@@ -1490,7 +1490,7 @@ class App(ctk.CTk):
         right.grid(row=0,column=1,sticky="nsew")
 
         frow=ctk.CTkFrame(right,fg_color=BG3,height=48,corner_radius=0); frow.pack(fill="x")
-        self._get_from, self._get_to = date_row(frow, self._refresh, self._all_time_log)
+        self._get_from, self._get_to, self._do_all_time = date_row(frow, self._refresh, self._all_time_log)
         dim_btn(frow,"🗑 Delete",self._delete_selected,w=95).pack(side="right",padx=2)
         dim_btn(frow,"📤 Upload Guild",self._upload_selected_to_guild,w=130).pack(side="right",padx=2)
         dim_btn(frow,"Export CSV",self._bulk_csv,w=105).pack(side="right",padx=2)
@@ -1997,7 +1997,7 @@ class App(ctk.CTk):
         # ── Filter bar ───────────────────────────────────────────────────────
         fbar=ctk.CTkFrame(page,fg_color=BG2,height=54,corner_radius=0); fbar.pack(fill="x"); fbar.pack_propagate(False)
         ctk.CTkFrame(fbar,fg_color=GOLD_DK,height=1,corner_radius=0).place(relx=0,rely=1.0,relwidth=1.0,anchor="sw")
-        self._xget_from,self._xget_to=date_row(fbar,self._refresh_xp,self._all_time_xp)
+        self._xget_from,self._xget_to,_=date_row(fbar,self._refresh_xp,self._all_time_xp)
         ctk.CTkLabel(fbar,text="  View:",text_color=DIM2,font=F_BODY).pack(side="left",padx=(16,4))
         self._xp_view=tk.StringVar(value="month")
         for label,val in [("Monthly","month"),("Daily","day"),("Hourly","hour")]:
@@ -2359,7 +2359,7 @@ class App(ctk.CTk):
     # GUILD
     # ═══════════════════════════════════════════════════════════════════════════
     # ── Guild API helper ───────────────────────────────────────────────────────
-    GUILD_API = "https://outlands-multi-tracker.com"  # v0.69.6 — Bearer auth header instead of ?token=
+    GUILD_API = "https://outlands-multi-tracker.com"
     _guild_cache:   dict = {}  # class-level cache — per instance via _build_guild
     _members_cache: dict = {}  # class-level members cache
 
