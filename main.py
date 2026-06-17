@@ -2359,21 +2359,28 @@ class App(ctk.CTk):
     # GUILD
     # ═══════════════════════════════════════════════════════════════════════════
     # ── Guild API helper ───────────────────────────────────────────────────────
-    GUILD_API = "http://localhost:8765"
+    GUILD_API = "https://outlands-multi-tracker.com"  # v0.69.6 — Bearer auth header instead of ?token=
     _guild_cache:   dict = {}  # class-level cache — per instance via _build_guild
     _members_cache: dict = {}  # class-level members cache
 
     def _guild_api(self, method: str, path: str, params: dict = None, body: dict = None) -> dict:
-        """Make a request to the Guild API. Returns dict or raises."""
+        """Make a request to the Guild API. Returns dict or raises.
+
+        If params contains a "token" key, it is sent as an Authorization: Bearer
+        header instead of a URL query parameter — query strings end up in server
+        logs and Referer headers, which is not where a session token should live.
+        """
         import urllib.request, urllib.parse, json as _json
+        params = dict(params) if params else {}
+        token = params.pop("token", None)
         url = self.GUILD_API + path
         if params:
             url += "?" + urllib.parse.urlencode(params)
         data = _json.dumps(body).encode() if body else None
-        req = urllib.request.Request(
-            url, data=data, method=method,
-            headers={"Content-Type": "application/json", "User-Agent": "OMT/1.0"}
-        )
+        headers = {"Content-Type": "application/json", "User-Agent": "OMT/1.0"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=8) as r:
                 return _json.loads(r.read())
