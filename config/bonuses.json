@@ -109,5 +109,42 @@
       "type": "unknown",
       "label": "Crafting Exceptional Chance"
     }
+  },
+  "2026-06-27": {
+    "Cavernam": {
+      "value": "",
+      "type": "sanctuary",
+      "label": "Sanctuary Dungeon"
+    },
+    "Inferno": {
+      "value": "",
+      "type": "challenger",
+      "label": "Challenger Dungeon"
+    },
+    "Ocean": {
+      "value": "+25%",
+      "type": "respawn",
+      "label": "Faster Respawn"
+    },
+    "Ossuary": {
+      "value": "+15%",
+      "type": "gold_loot",
+      "label": "Gold Loot"
+    },
+    "Nusero": {
+      "value": "+20%",
+      "type": "experience",
+      "label": "Experience Gain"
+    },
+    "Anchor's Rest": {
+      "value": "+10%",
+      "type": "vendor",
+      "label": "Vendor Rebate"
+    },
+    "Terran": {
+      "value": "+15%",
+      "type": "unknown",
+      "label": "Crafting Exceptional Chance"
+    }
   }
 }
