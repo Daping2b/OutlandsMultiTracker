@@ -1,0 +1,28 @@
+name: Sync changelog to VPS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/changelog.json'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/omt_deploy
+          chmod 600 ~/.ssh/omt_deploy
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload changelog.json to VPS
+        run: |
+          scp -i ~/.ssh/omt_deploy \
+              config/changelog.json \
+              ubuntu@${{ secrets.VPS_HOST }}:~/omt-website/changelog.json
