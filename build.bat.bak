@@ -1,0 +1,111 @@
+@echo off
+title Outlands Multi Tracker — Build
+color 0E
+echo.
+echo  ================================================
+echo   Outlands Multi Tracker  —  Build Script
+echo   by Daping
+echo  ================================================
+echo.
+
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo  [ERROR] Python not found!
+    pause & exit /b 1
+)
+echo  [OK] Python:
+python --version
+
+echo.
+echo  [1/5] Installing dependencies...
+python -m pip install --upgrade pip --quiet
+python -m pip install customtkinter Pillow matplotlib numpy pystray tkcalendar pyinstaller babel --quiet
+if errorlevel 1 (echo [ERROR] & pause & exit /b 1)
+echo  [OK] Dependencies installed.
+
+echo.
+echo  [2/5] Building main app...
+if exist "dist\OutlandsMultiTracker" rmdir /s /q "dist\OutlandsMultiTracker"
+if exist "build" rmdir /s /q "build"
+python -m PyInstaller OMT.spec --noconfirm
+if errorlevel 1 (echo [ERROR] Main build failed. & pause & exit /b 1)
+echo  [OK] Main app built.
+
+echo.
+echo  [3/5] Building Updater.exe...
+if exist "dist\Updater" rmdir /s /q "dist\Updater"
+python -m PyInstaller Updater.spec --noconfirm
+if errorlevel 1 (echo [ERROR] Updater build failed. & pause & exit /b 1)
+echo  [OK] Updater built.
+
+echo.
+echo  [4/5] Copying required files into OutlandsMultiTracker...
+set "DIST=dist\OutlandsMultiTracker"
+
+if not exist "%DIST%\data" mkdir "%DIST%\data"
+
+:: Whitelist-based copy: only known, legitimate files are shipped.
+:: This protects against anything personal/experimental that may exist
+:: in the source folder (test data, local-only configs, work-in-progress
+:: files) ever leaking into a public release — even files we haven't
+:: thought to exclude yet, since nothing gets copied unless listed here.
+
+mkdir "%DIST%\assets" >nul 2>nul
+mkdir "%DIST%\assets\bonus_icons" >nul 2>nul
+for %%F in (
+    ForgottenShippingCrate1.png O-MTBig.png O-MTMedium.png O-MTSmall.ico
+    O-MTSmall.png O-MTSmall_128x128.png O-MTSmall_32x32.png O-MTSmall_64x64.png
+    arcanescroll1.png bonus.png bonus_challenger.png bonus_crafting.png
+    bonus_experience.png bonus_gold_loot.png bonus_respawn.png bonus_sanctuary.png
+    bonus_vendor.png carpentrycraftingmanual.png chainbonus.png chromaticcore1.png
+    doubloons1.png feedback.png goldpile.png guild.png gupload.png
+    hatchetiron1.png poisonkit.png shepherdscrook.png storageshelf.png
+    tinkering_candelabra.png tinkering_clock.png tinkering_globe.png
+    tinkering_tinkertools.png woodenshield.png
+) do (
+    if exist "assets\%%F" copy /Y "assets\%%F" "%DIST%\assets\%%F" >nul
+)
+
+mkdir "%DIST%\config" >nul 2>nul
+for %%F in (
+    Dungeon.json Wilderness.json bonuses.json changelog.json
+    howto_content.json version.json
+) do (
+    if exist "config\%%F" copy /Y "config\%%F" "%DIST%\config\%%F" >nul
+)
+
+mkdir "%DIST%\scripts" >nul 2>nul
+for %%F in (
+    OMT_END.razor OMT_START.razor
+) do (
+    if exist "scripts\%%F" copy /Y "scripts\%%F" "%DIST%\scripts\%%F" >nul
+)
+
+:: Copy Updater.exe directly into OutlandsMultiTracker (not as subfolder)
+copy /Y "dist\Updater\Updater.exe" "%DIST%\Updater.exe" >nul
+
+echo  [OK] Files copied.
+
+echo.
+echo  Checking for source files not included in this build...
+for %%F in (assets\*) do (
+    if not exist "%DIST%\assets\%%~nxF" if not "%%~nxF"=="bonus_icons" echo  [WARNING] assets\%%~nxF was NOT copied — add it to build.bat if it should ship.
+)
+for %%F in (config\*) do (
+    if not exist "%DIST%\config\%%~nxF" echo  [INFO] config\%%~nxF was not copied (expected for settings.json / dev_override.json / test files).
+)
+for %%F in (scripts\*) do (
+    if not exist "%DIST%\scripts\%%~nxF" echo  [WARNING] scripts\%%~nxF was NOT copied — add it to build.bat if it should ship.
+)
+
+echo.
+echo  ================================================
+echo  [5/5] Build complete!
+echo.
+echo  Your portable dist is in: %DIST%\
+echo.
+echo  Zip it as OutlandsMultiTracker.zip
+echo  Upload to GitHub Releases
+echo  ================================================
+echo.
+pause

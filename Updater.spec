@@ -22,11 +22,11 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=True,  # console=True so we can see errors if needed
 )
 coll = COLLECT(
     exe, a.binaries, a.zipfiles, a.datas,
-    strip=False, upx=True, upx_exclude=[],
+    strip=False, upx=False, upx_exclude=[],
     name='Updater',
 )
