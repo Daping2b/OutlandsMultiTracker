@@ -551,7 +551,7 @@ def date_row(parent, cmd_apply, cmd_all):
                   border_color=BORDER,border_width=1,font=F_BODY,
                   command=clear).pack(side="left")
     gold_btn(row,"⏳ All Time",do_all,w=105,h=30).pack(side="left",padx=8)
-    return get_from, get_to
+    return get_from, get_to, do_all
 
 # ── Auto-updater ───────────────────────────────────────────────────────────────
 def check_for_update():
@@ -1284,7 +1284,7 @@ class App(ctk.CTk):
         # Start Log Analysis on All / All Time
         self._act_f  = "All"
         self._char_f = "All"
-        self.after(100, self._all_time_log)
+        self.after(100, lambda: self._do_all_time())
         self.update()
 
     def _show(self,name):
@@ -1490,7 +1490,7 @@ class App(ctk.CTk):
         right.grid(row=0,column=1,sticky="nsew")
 
         frow=ctk.CTkFrame(right,fg_color=BG3,height=48,corner_radius=0); frow.pack(fill="x")
-        self._get_from, self._get_to = date_row(frow, self._refresh, self._all_time_log)
+        self._get_from, self._get_to, self._do_all_time = date_row(frow, self._refresh, self._all_time_log)
         dim_btn(frow,"🗑 Delete",self._delete_selected,w=95).pack(side="right",padx=2)
         dim_btn(frow,"📤 Upload Guild",self._upload_selected_to_guild,w=130).pack(side="right",padx=2)
         dim_btn(frow,"Export CSV",self._bulk_csv,w=105).pack(side="right",padx=2)
@@ -1997,7 +1997,7 @@ class App(ctk.CTk):
         # ── Filter bar ───────────────────────────────────────────────────────
         fbar=ctk.CTkFrame(page,fg_color=BG2,height=54,corner_radius=0); fbar.pack(fill="x"); fbar.pack_propagate(False)
         ctk.CTkFrame(fbar,fg_color=GOLD_DK,height=1,corner_radius=0).place(relx=0,rely=1.0,relwidth=1.0,anchor="sw")
-        self._xget_from,self._xget_to=date_row(fbar,self._refresh_xp,self._all_time_xp)
+        self._xget_from,self._xget_to,_=date_row(fbar,self._refresh_xp,self._all_time_xp)
         ctk.CTkLabel(fbar,text="  View:",text_color=DIM2,font=F_BODY).pack(side="left",padx=(16,4))
         self._xp_view=tk.StringVar(value="month")
         for label,val in [("Monthly","month"),("Daily","day"),("Hourly","hour")]:
@@ -2359,21 +2359,28 @@ class App(ctk.CTk):
     # GUILD
     # ═══════════════════════════════════════════════════════════════════════════
     # ── Guild API helper ───────────────────────────────────────────────────────
-    GUILD_API = "http://localhost:8765"
+    GUILD_API = "https://outlands-multi-tracker.com"
     _guild_cache:   dict = {}  # class-level cache — per instance via _build_guild
     _members_cache: dict = {}  # class-level members cache
 
     def _guild_api(self, method: str, path: str, params: dict = None, body: dict = None) -> dict:
-        """Make a request to the Guild API. Returns dict or raises."""
+        """Make a request to the Guild API. Returns dict or raises.
+
+        If params contains a "token" key, it is sent as an Authorization: Bearer
+        header instead of a URL query parameter — query strings end up in server
+        logs and Referer headers, which is not where a session token should live.
+        """
         import urllib.request, urllib.parse, json as _json
+        params = dict(params) if params else {}
+        token = params.pop("token", None)
         url = self.GUILD_API + path
         if params:
             url += "?" + urllib.parse.urlencode(params)
         data = _json.dumps(body).encode() if body else None
-        req = urllib.request.Request(
-            url, data=data, method=method,
-            headers={"Content-Type": "application/json", "User-Agent": "OMT/1.0"}
-        )
+        headers = {"Content-Type": "application/json", "User-Agent": "OMT/1.0"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=8) as r:
                 return _json.loads(r.read())
@@ -3033,23 +3040,376 @@ class App(ctk.CTk):
 
     # ── My Characters ─────────────────────────────────────────────────────────
     def _guild_show_characters(self):
+        """My Characters — liste + ajout/édition/suppression de personnages."""
+        import threading
         for w in self._guild_content.winfo_children(): w.destroy()
-        me = getattr(self, '_guild_me', {})
-        ctk.CTkLabel(self._guild_content, text="  \U0001f3ae  My Characters",
-                     font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(12,4))
-        ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0,12))
-        chars = me.get("characters", [])
-        if chars:
+        me      = getattr(self, "_guild_me", {})
+        user_id = me.get("id", "")
+
+        # Trouver la guilde active
+        memberships = me.get("memberships", [])
+        guild_id    = memberships[0]["guild_id"] if memberships else None
+
+        # Couleurs et labels des types
+        ROLE_COLORS = {
+            "pvp": "#5B9BD5", "pvm": "#FFD700", "pk": "#E05050",
+            "harvester": "#7EC88A", "crafter": "#B57FD8",
+        }
+        ROLE_LABELS = {
+            "pvp": "PvP", "pvm": "PvM", "pk": "PK",
+            "harvester": "Harv.", "crafter": "Craft.",
+        }
+        ACCOUNT_DEFAULT = {1: "Account 1", 2: "Account 2", 3: "Account 3"}
+
+        # ── En-tête ───────────────────────────────────────────────────────────
+        hdr = ctk.CTkFrame(self._guild_content, fg_color="transparent")
+        hdr.pack(fill="x", padx=16, pady=(12, 4))
+        ctk.CTkLabel(hdr, text="  \U0001f3ae  My Characters",
+                     font=F_HEAD, text_color=GOLD_LT, anchor="w").pack(side="left")
+        add_btn = ctk.CTkButton(hdr, text="+ Add Character", width=130, height=28,
+                                fg_color=GOLD_DK, hover_color=GOLD, text_color=BG,
+                                font=F_SMALL, corner_radius=4,
+                                command=lambda: _open_add_dialog())
+        add_btn.pack(side="right")
+        ctk.CTkFrame(self._guild_content, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0, 10))
+
+        # Zone scrollable pour la liste
+        scroll = ctk.CTkScrollableFrame(self._guild_content, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8)
+
+        status_lbl = ctk.CTkLabel(self._guild_content, text="",
+                                  font=F_SMALL, text_color=DIM2)
+        status_lbl.pack(pady=4)
+
+        def _set_status(msg, color=DIM2):
+            self.after(0, lambda: status_lbl.configure(text=msg, text_color=color))
+
+        def _load():
+            if not guild_id:
+                _set_status("No guild selected.", DIM2)
+                return
+            try:
+                # GET /guild/{id}/characters retourne ses propres persos
+                # + ceux des autres si view_characters/manage_characters/leader/SA
+                data = self._guild_api("GET", f"/guild/{guild_id}/characters",
+                                       params={"token": self._guild_session_token})
+                can_view_all = data.get("can_view_all", False)
+                chars_by_user = data.get("characters_by_user", {})
+                # Si on peut voir tous les membres, on garde tout
+                # Sinon on filtre sur son propre user_id (sécurité client)
+                if can_view_all:
+                    all_chars = [c for lst in chars_by_user.values() for c in lst]
+                else:
+                    all_chars = chars_by_user.get(user_id, [])
+                # Stocker pour le renommage de compte
+                self._guild_chars_cache = all_chars
+                self.after(0, lambda: _render(all_chars, can_view_all))
+            except RuntimeError as e:
+                err = str(e)
+                self.after(0, lambda msg=err: _set_status(f"Error: {msg}", RED))
+
+        def _render(chars, can_view_all=False):
+            for w in scroll.winfo_children(): w.destroy()
+            if not chars:
+                ctk.CTkLabel(scroll, text="No characters registered yet.",
+                             font=F_BODY, text_color=DIM2).pack(pady=20)
+                return
+
+            # Si on voit tous les membres, grouper par user puis par account
+            if can_view_all:
+                # Grouper d'abord par user_id
+                by_user: dict = {}
+                for c in chars:
+                    by_user.setdefault(c.get("user_id", "?"), []).append(c)
+                for uid, user_chars in by_user.items():
+                    # En-tête membre
+                    ctk.CTkLabel(scroll, text=f"  👤 {uid}",
+                                 font=F_BODY_B, text_color=GOLD_LT,
+                                 anchor="w").pack(fill="x", padx=4, pady=(10, 2))
+                    ctk.CTkFrame(scroll, fg_color=GOLD_DK, height=1).pack(fill="x", padx=4, pady=(0, 4))
+                    _render_accounts(scroll, user_chars)
+                return
+
+        def _render_accounts(parent, chars):
+            accounts = {}
             for c in chars:
-                row = ctk.CTkFrame(self._guild_content, fg_color=BG2, corner_radius=4)
-                row.pack(fill="x", padx=16, pady=2)
-                ctk.CTkLabel(row, text=c["name"], font=F_BODY,
-                             text_color=TEXT, anchor="w").pack(side="left", padx=12, pady=6)
+                acc = c.get("account_number", 1)
+                accounts.setdefault(acc, []).append(c)
+            for acc_num in sorted(accounts.keys()):
+                acc_chars = accounts[acc_num]
+                acc_label = acc_chars[0].get("account_label") or ACCOUNT_DEFAULT.get(acc_num, f"Account {acc_num}")
+                hdr_acc = ctk.CTkFrame(parent, fg_color="transparent")
+                hdr_acc.pack(fill="x", padx=4, pady=(6, 2))
+                ctk.CTkLabel(hdr_acc, text=f"  {acc_label}",
+                             font=F_BODY_B, text_color=GOLD, anchor="w").pack(side="left")
+                ctk.CTkButton(hdr_acc, text="✏", width=24, height=20,
+                              fg_color="transparent", hover_color=BG3,
+                              text_color=DIM, font=F_SMALL,
+                              command=lambda an=acc_num, al=acc_label: _rename_account(an, al)
+                              ).pack(side="left", padx=2)
+                ctk.CTkFrame(parent, fg_color=BG3, height=1).pack(fill="x", padx=4, pady=(0, 4))
+                for c in acc_chars:
+                    _draw_char_row(parent, c)
+
+            # Grouper par account_number
+            accounts = {}
+            for c in chars:
+                acc = c.get("account_number", 1)
+                accounts.setdefault(acc, []).append(c)
+
+            for acc_num in sorted(accounts.keys()):
+                acc_chars = accounts[acc_num]
+                # Label du compte
+                # Prendre le label du premier personnage du compte (tous ont le même)
+                acc_label = acc_chars[0].get("account_label") or ACCOUNT_DEFAULT.get(acc_num, f"Account {acc_num}")
+                hdr_acc = ctk.CTkFrame(scroll, fg_color="transparent")
+                hdr_acc.pack(fill="x", padx=4, pady=(10, 2))
+                ctk.CTkLabel(hdr_acc, text=f"  {acc_label}",
+                             font=F_BODY_B, text_color=GOLD, anchor="w").pack(side="left")
+                ctk.CTkButton(hdr_acc, text="✏", width=24, height=20,
+                              fg_color="transparent", hover_color=BG3,
+                              text_color=DIM, font=F_SMALL,
+                              command=lambda an=acc_num, al=acc_label: _rename_account(an, al)
+                              ).pack(side="left", padx=2)
+                ctk.CTkFrame(scroll, fg_color=BG3, height=1).pack(fill="x", padx=4, pady=(0, 4))
+
+                for c in acc_chars:
+                    _draw_char_row(scroll, c)
+
+        def _draw_char_row(parent, c):
+            row = ctk.CTkFrame(parent, fg_color=BG2, corner_radius=4)
+            row.pack(fill="x", padx=4, pady=2)
+
+            # Nom du personnage
+            ctk.CTkLabel(row, text=c["name"], font=F_BODY,
+                         text_color=TEXT, anchor="w", width=160).pack(side="left", padx=10, pady=6)
+
+            # Tags de type (multi)
+            tag_frame = ctk.CTkFrame(row, fg_color="transparent")
+            tag_frame.pack(side="left", padx=4)
+            for role in c.get("roles", []):
+                color = ROLE_COLORS.get(role, DIM)
+                label = ROLE_LABELS.get(role, role.capitalize())
+                ctk.CTkLabel(tag_frame, text=label, font=F_SMALL,
+                             text_color=BG, fg_color=color,
+                             corner_radius=4, width=44, height=18).pack(side="left", padx=2)
+
+            # Boutons Edit / Delete
+            btn_frame = ctk.CTkFrame(row, fg_color="transparent")
+            btn_frame.pack(side="right", padx=6)
+            ctk.CTkButton(btn_frame, text="✏ Edit", width=64, height=24,
+                          fg_color=BG3, hover_color=BG4, text_color=GOLD,
+                          font=F_SMALL, corner_radius=4,
+                          command=lambda ch=c: _open_edit_dialog(ch)).pack(side="left", padx=2)
+            ctk.CTkButton(btn_frame, text="🗑", width=28, height=24,
+                          fg_color="transparent", hover_color="#5a1a1a",
+                          text_color=RED, font=F_SMALL, corner_radius=4,
+                          command=lambda ch=c: _confirm_delete(ch)).pack(side="left", padx=2)
+
+        # ── Dialogue ajout ────────────────────────────────────────────────────
+        def _open_add_dialog():
+            win = ctk.CTkToplevel(self)
+            win.title("Add Character"); win.geometry("380x340")
+            win.configure(fg_color=BG); win.grab_set()
+            win.protocol("WM_DELETE_WINDOW", win.destroy)
+            self._set_win_icon(win)
+            ctk.CTkLabel(win, text="  Add Character", font=F_HEAD,
+                         text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(14, 4))
+            ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0, 12))
+
+            # Nom
+            ctk.CTkLabel(win, text="Character name", font=F_SMALL,
+                         text_color=DIM, anchor="w").pack(fill="x", padx=16)
+            name_var = ctk.StringVar()
+            ctk.CTkEntry(win, textvariable=name_var, placeholder_text="ExactName (case-sensitive)",
+                         font=F_BODY).pack(fill="x", padx=16, pady=(2, 8))
+
+            # Compte
+            ctk.CTkLabel(win, text="Account", font=F_SMALL,
+                         text_color=DIM, anchor="w").pack(fill="x", padx=16)
+            acc_var = ctk.StringVar(value="1")
+            ctk.CTkSegmentedButton(win, values=["1", "2", "3"],
+                                   variable=acc_var,
+                                   fg_color=BG3,
+                                   selected_color=GOLD_DK,
+                                   selected_hover_color=GOLD,
+                                   text_color=TEXT).pack(padx=16, pady=(2, 8), anchor="w")
+
+            # Types (checkboxes)
+            ctk.CTkLabel(win, text="Type(s)", font=F_SMALL,
+                         text_color=DIM, anchor="w").pack(fill="x", padx=16)
+            role_frame = ctk.CTkFrame(win, fg_color="transparent")
+            role_frame.pack(fill="x", padx=16, pady=(2, 12))
+            role_vars = {}
+            for role, label in ROLE_LABELS.items():
+                var = ctk.BooleanVar(value=False)
+                role_vars[role] = var
+                ctk.CTkCheckBox(role_frame, text=label, variable=var,
+                                text_color=ROLE_COLORS[role],
+                                checkmark_color=ROLE_COLORS[role],
+                                fg_color=BG3, hover_color=BG4,
+                                font=F_SMALL).pack(side="left", padx=6)
+
+            err_lbl = ctk.CTkLabel(win, text="", font=F_SMALL, text_color=RED)
+            err_lbl.pack()
+
+            def _do_add():
+                name = name_var.get().strip()
+                if not name:
+                    err_lbl.configure(text="Name is required.")
+                    return
+                acc  = int(acc_var.get())
+                roles = [r for r, v in role_vars.items() if v.get()]
+                def _req():
+                    try:
+                        self._guild_api("POST", f"/guild/{guild_id}/characters",
+                                        body={"name": name, "account_number": acc, "roles": roles},
+                                        params={"token": self._guild_session_token})
+                        self.after(0, lambda: [win.destroy(), threading.Thread(target=_load, daemon=True).start()])
+                    except RuntimeError as e:
+                        msg = str(e)
+                        self.after(0, lambda m=msg: err_lbl.configure(text=m))
+                threading.Thread(target=_req, daemon=True).start()
+
+            ctk.CTkButton(win, text="Add Character", fg_color=GOLD_DK,
+                          hover_color=GOLD, text_color=BG, font=F_BODY_B,
+                          command=_do_add).pack(padx=16, pady=4, fill="x")
+
+        # ── Dialogue édition ──────────────────────────────────────────────────
+        def _open_edit_dialog(c):
+            win = ctk.CTkToplevel(self)
+            win.title("Edit Character"); win.geometry("380x340")
+            win.configure(fg_color=BG); win.grab_set()
+            win.protocol("WM_DELETE_WINDOW", win.destroy)
+            self._set_win_icon(win)
+            ctk.CTkLabel(win, text="  Edit Character", font=F_HEAD,
+                         text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(14, 4))
+            ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0, 12))
+
+            # Nom
+            ctk.CTkLabel(win, text="Character name", font=F_SMALL,
+                         text_color=DIM, anchor="w").pack(fill="x", padx=16)
+            name_var = ctk.StringVar(value=c["name"])
+            ctk.CTkEntry(win, textvariable=name_var, font=F_BODY).pack(fill="x", padx=16, pady=(2, 8))
+
+            # Compte
+            ctk.CTkLabel(win, text="Account", font=F_SMALL,
+                         text_color=DIM, anchor="w").pack(fill="x", padx=16)
+            acc_var = ctk.StringVar(value=str(c.get("account_number", 1)))
+            ctk.CTkSegmentedButton(win, values=["1", "2", "3"],
+                                   variable=acc_var,
+                                   fg_color=BG3,
+                                   selected_color=GOLD_DK,
+                                   selected_hover_color=GOLD,
+                                   text_color=TEXT).pack(padx=16, pady=(2, 8), anchor="w")
+
+            # Types
+            ctk.CTkLabel(win, text="Type(s)", font=F_SMALL,
+                         text_color=DIM, anchor="w").pack(fill="x", padx=16)
+            role_frame = ctk.CTkFrame(win, fg_color="transparent")
+            role_frame.pack(fill="x", padx=16, pady=(2, 12))
+            current_roles = c.get("roles", [])
+            role_vars = {}
+            for role, label in ROLE_LABELS.items():
+                var = ctk.BooleanVar(value=role in current_roles)
+                role_vars[role] = var
+                ctk.CTkCheckBox(role_frame, text=label, variable=var,
+                                text_color=ROLE_COLORS[role],
+                                checkmark_color=ROLE_COLORS[role],
+                                fg_color=BG3, hover_color=BG4,
+                                font=F_SMALL).pack(side="left", padx=6)
+
+            err_lbl = ctk.CTkLabel(win, text="", font=F_SMALL, text_color=RED)
+            err_lbl.pack()
+
+            def _do_edit():
+                name  = name_var.get().strip()
+                if not name:
+                    err_lbl.configure(text="Name is required.")
+                    return
+                acc   = int(acc_var.get())
+                roles = [r for r, v in role_vars.items() if v.get()]
+                def _req():
+                    try:
+                        self._guild_api("PATCH", f"/guild/{guild_id}/characters/{c['id']}",
+                                        body={"name": name, "account_number": acc},
+                                        params={"token": self._guild_session_token})
+                        self._guild_api("PUT", f"/guild/{guild_id}/characters/{c['id']}/roles",
+                                        body={"roles": roles},
+                                        params={"token": self._guild_session_token})
+                        self.after(0, lambda: [win.destroy(), threading.Thread(target=_load, daemon=True).start()])
+                    except RuntimeError as e:
+                        msg = str(e)
+                        self.after(0, lambda m=msg: err_lbl.configure(text=m))
+                threading.Thread(target=_req, daemon=True).start()
+
+            ctk.CTkButton(win, text="Save Changes", fg_color=GOLD_DK,
+                          hover_color=GOLD, text_color=BG, font=F_BODY_B,
+                          command=_do_edit).pack(padx=16, pady=4, fill="x")
+
+        # ── Dialogue renommage compte ──────────────────────────────────────────
+        def _rename_account(acc_num, current_label):
+            win = ctk.CTkToplevel(self)
+            win.title("Rename Account"); win.geometry("340x180")
+            win.configure(fg_color=BG); win.grab_set()
+            win.protocol("WM_DELETE_WINDOW", win.destroy)
+            self._set_win_icon(win)
+            ctk.CTkLabel(win, text=f"  Rename Account {acc_num}", font=F_HEAD,
+                         text_color=GOLD_LT, anchor="w").pack(fill="x", padx=16, pady=(14, 4))
+            ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=16, pady=(0, 12))
+            lbl_var = ctk.StringVar(value=current_label if current_label not in (
+                "Account 1","Account 2","Account 3") else "")
+            ctk.CTkEntry(win, textvariable=lbl_var,
+                         placeholder_text=f"Account {acc_num} label (leave empty to reset)",
+                         font=F_BODY).pack(fill="x", padx=16, pady=(0, 8))
+            err_lbl = ctk.CTkLabel(win, text="", font=F_SMALL, text_color=RED)
+            err_lbl.pack()
+
+            def _do_rename():
+                new_label = lbl_var.get().strip() or None
+                # Mettre à jour tous les personnages de ce compte
+                chars_to_update = [
+                    c for c in getattr(self, "_guild_chars_cache", [])
+                    if c.get("account_number") == acc_num
+                ]
+                def _req():
+                    try:
+                        for ch in chars_to_update:
+                            self._guild_api("PATCH", f"/guild/{guild_id}/characters/{ch['id']}",
+                                            body={"account_label": new_label or ""},
+                                            params={"token": self._guild_session_token})
+                        self.after(0, lambda: [win.destroy(), threading.Thread(target=_load, daemon=True).start()])
+                    except RuntimeError as e:
+                        msg = str(e)
+                        self.after(0, lambda m=msg: err_lbl.configure(text=m))
+                threading.Thread(target=_req, daemon=True).start()
+
+            ctk.CTkButton(win, text="Rename", fg_color=GOLD_DK,
+                          hover_color=GOLD, text_color=BG, font=F_BODY_B,
+                          command=_do_rename).pack(padx=16, pady=4, fill="x")
+
+        # ── Suppression ───────────────────────────────────────────────────────
+        def _confirm_delete(c):
+            from tkinter import messagebox
+            if not messagebox.askyesno("Delete Character",
+                    f"Delete '{c['name']}'?\nThis cannot be undone."):
+                return
+            def _req():
+                try:
+                    self._guild_api("DELETE", f"/guild/{guild_id}/characters/{c['id']}",
+                                    params={"token": self._guild_session_token})
+                    self.after(0, lambda: threading.Thread(target=_load, daemon=True).start())
+                except RuntimeError as e:
+                    err = str(e)
+                    self.after(0, lambda msg=err: _set_status(f"Error: {msg}", RED))
+            threading.Thread(target=_req, daemon=True).start()
+
+        # ── Lancement initial ──────────────────────────────────────────────────
+        if guild_id:
+            threading.Thread(target=_load, daemon=True).start()
         else:
-            ctk.CTkLabel(self._guild_content, text="No characters registered yet.",
-                         font=F_BODY, text_color=DIM2).pack(pady=8)
-        ctk.CTkLabel(self._guild_content, text="Character management coming soon.",
-                     font=F_SMALL, text_color=DIM2).pack(pady=4)
+            ctk.CTkLabel(scroll, text="Join a guild to manage characters.",
+                         font=F_BODY, text_color=DIM2).pack(pady=20)
 
     # ── GU Edit — SuperAdmin guild manager ────────────────────────────────────
     def _guild_gu_edit(self):
