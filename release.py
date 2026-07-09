@@ -331,10 +331,32 @@ def github_upload(new_ver_str, dry):
         req = urllib.request.Request(api_url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as r:
             release = json.loads(r.read())
+        ok(f"Release existante trouvée")
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            die(f"Release {tag} introuvable sur GitHub. Lance d'abord : python release.py {new_ver_str}")
-        die(f"Erreur GitHub API : {e.code} {e.reason}")
+            # Créer la release si elle n'existe pas encore
+            warn(f"Release {tag} absente — création en cours...")
+            create_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases"
+            create_body = json.dumps({
+                "tag_name": tag,
+                "name": f"OMT {tag}",
+                "body": f"Outlands Multi Tracker {tag}",
+                "draft": False,
+                "prerelease": False,
+            }).encode()
+            create_req = urllib.request.Request(
+                create_url, data=create_body,
+                headers={**headers, "Content-Type": "application/json"},
+                method="POST"
+            )
+            try:
+                with urllib.request.urlopen(create_req, timeout=15) as r:
+                    release = json.loads(r.read())
+                ok(f"Release {tag} créée")
+            except Exception as ce:
+                die(f"Impossible de créer la release : {ce}")
+        else:
+            die(f"Erreur GitHub API : {e.code} {e.reason}")
     except Exception as e:
         die(f"Erreur réseau : {e}")
 
