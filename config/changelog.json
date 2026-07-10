@@ -1,5 +1,43 @@
 [
   {
+    "version": "0.74.1",
+    "date": "2026-07-10",
+    "changes": [
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild Sessions — sessions are now sorted by date descending with a day separator between each day"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild Members — character list now expands inline when clicking the Characters button"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild — guild selector dropdown added when a member belongs to multiple guilds"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Performance — sessions and members lists now render progressively to keep the UI responsive on large guilds"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Guild — logout no longer freezes the UI if the backend is slow to respond"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Guild — login connection error is now shown properly instead of freezing the interface"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Guild — upload and delete errors are now shown instead of failing silently"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Official Server — channel list now loads correctly after selecting a server"
+      }
+    ]
+  },
+  {
     "version": "0.74",
     "date": "2026-07-09",
     "changes": [
