@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.74.3",
+    "date": "2026-07-10",
+    "changes": [
+      {
+        "type": "BUG FIX",
+        "text": "Fixed startup crash introduced in v0.74.2"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Guild Admin — saving role mappings with an empty list no longer returns a server error"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Guild selector now appears above Guild Admin in the navigation panel"
+      }
+    ]
+  },
+  {
     "version": "0.74.2",
     "date": "2026-07-10",
     "changes": [

@@ -1274,6 +1274,9 @@ class App(ctk.CTk):
         # Reappliquer l icone OMT quand la fenetre recupere le focus
         # CTk remplace l icone par sa plume quand un CTkToplevel s ouvre
         def _reapply_main_icon(event=None):
+            if not self.winfo_exists(): return
+            # Ne rien faire si l icone n est pas encore initialisee
+            if not hasattr(self, "_main_icon_path") and not hasattr(self, "_main_icon_ph"): return
             try:
                 if hasattr(self, "_main_icon_path"):
                     self.iconbitmap(self._main_icon_path)
@@ -1283,8 +1286,8 @@ class App(ctk.CTk):
                 pass
         self._reapply_main_icon = _reapply_main_icon
         self.bind("<FocusIn>", _reapply_main_icon)
-        self.bind("<Map>", _reapply_main_icon)
-        self.after(1000, _reapply_main_icon)
+        # <Map> retire - se declenche trop tot au demarrage avant init icone
+        self.after(1500, _reapply_main_icon)
 
         # ── Nav bar (black background to match O-MTMedium) ────────────────────
         nav=ctk.CTkFrame(self, fg_color=NAV_BG, height=60, corner_radius=0)
@@ -2484,7 +2487,7 @@ class App(ctk.CTk):
         url = self.GUILD_API + path
         if params:
             url += "?" + urllib.parse.urlencode(params)
-        data = _json.dumps(body).encode() if body else None
+        data = _json.dumps(body).encode() if body is not None else None
         headers = {"Content-Type": "application/json", "User-Agent": "OMT/1.0"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -2665,10 +2668,6 @@ class App(ctk.CTk):
 
         guild_names = list(guild_map.keys())
 
-        # Zone nav dynamique — reconstruite à chaque changement de guilde
-        nav_guild_zone = ctk.CTkFrame(nav, fg_color="transparent")
-        nav_guild_zone.pack(fill="x")
-
         def _render_guild_nav(gname):
             """Reconstruit les boutons de nav pour la guilde sélectionnée."""
             # Nettoyer les anciens boutons de guilde (pas la section Personal)
@@ -2729,6 +2728,10 @@ class App(ctk.CTk):
                          text_color=GOLD_LT, font=F_BODY_B, anchor="w",
                          fg_color=BG4).pack(fill="x", padx=0, pady=0, ipady=8)
             ctk.CTkFrame(nav, fg_color=GOLD_DK, height=1).pack(fill="x", padx=0, pady=(0,4))
+
+        # Zone nav dynamique — sous le dropdown
+        nav_guild_zone = ctk.CTkFrame(nav, fg_color="transparent")
+        nav_guild_zone.pack(fill="x")
 
         # Render initial avec la première guilde
         if guild_names:
