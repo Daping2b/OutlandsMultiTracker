@@ -1,5 +1,39 @@
 [
   {
+    "version": "0.74",
+    "date": "2026-07-09",
+    "changes": [
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild Admin — Grade Permissions accordion restored with per-grade switches for all permission categories"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild Members — Characters button now expands inline to show a member's characters grouped by account"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Bot — Kick Bot button added when the bot is present on the server"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "My Characters — accounts now display as collapsible accordions labeled Main, Secondaire, Third and Unknown"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "My Characters — Add and Edit dialogs now show all 5 role types (PvP, PvM, PK, Harvester, Crafter) on two rows"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "My Characters — account selector now shows Main, Secondaire, Third instead of 1, 2, 3"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "CI — changelog.json is now automatically synced to the website on every push via GitHub Actions"
+      }
+    ]
+  },
+  {
     "version": "0.73",
     "date": "2026-07-09",
     "changes": [
@@ -1260,4 +1294,3 @@
     ]
   }
 ]
- 
