@@ -1,5 +1,59 @@
 [
   {
+    "version": "0.74.2",
+    "date": "2026-07-10",
+    "changes": [
+      {
+        "type": "NEW FEATURE",
+        "text": "Experience — Aspect Detail checkbox: default view shows a single gold bar with total XP per period, check to show stacked bars by aspect"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Experience — XP values are now displayed on each bar in simple mode"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Top Sessions — By Location & Type now groups sessions by activity: Boating, Harvesting, and sub-sections per dungeon and wilderness zone"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Experience — opens in Daily view with All Time and all characters selected by default"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Experience — filter bar reorganized into two rows for better readability"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Patch Notes — NEW ZONE and SECURITY categories now have distinct colors and entries are sorted by category"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild selector now has a distinctive style at the top of the navigation panel"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "How To — Pro Tips section added with scripting advice"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "OMT icon now stays consistent across all windows and taskbar at all times"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Item names in Log Analysis and Discord export no longer show parenthetical suffixes (except hue codes)"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Discord export — Unidentified Items now show as a total count instead of listing every item"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Feedback window now has 4 types: Bug, Suggestion, Location and Other"
+      }
+    ]
+  },
+  {
     "version": "0.74.1",
     "date": "2026-07-10",
     "changes": [

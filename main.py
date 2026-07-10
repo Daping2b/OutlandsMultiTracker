@@ -2,6 +2,7 @@
 Outlands Multi Tracker
 By Daping — Windows
 """
+import threading
 import sys, json, re, csv, threading
 from datetime import datetime, timedelta, date
 from pathlib import Path
@@ -141,6 +142,14 @@ def _expand_abbrev(s: str) -> str:
              .replace("cath$",  "cathedral")
              .strip())
 
+
+def _clean_item_name(name: str) -> str:
+    """Remove parenthetical suffixes from item names, EXCEPT hue codes.
+    'Iron Ingots (Valorite)' -> 'Iron Ingots'
+    'Dagger (hue 1234)'      -> 'Dagger (hue 1234)'
+    """
+    import re as _re
+    return _re.sub(r'\s*\([^)]*\)', lambda m: m.group(0) if 'hue' in m.group(0).lower() else '', name).strip()
 
 
 CAT_ICONS = {
@@ -439,13 +448,17 @@ def discord_text(sessions):
             for cat,items in s.get("loots",{}).items():
                 for n,q in items.items(): merged.setdefault(cat,{}).setdefault(n,0); merged[cat][n]+=q
         for cat in sorted(merged):
-            lines.append(f"  [{cat}]")
-            for n,q in sorted(merged[cat].items()): lines.append(f"    {n}: {q:,}")
+            total_cat = sum(merged[cat].values())
+            lines.append(f"  [{cat}] ({total_cat:,})")
+            if cat == "Unidentified Items": continue
+            for n,q in sorted(merged[cat].items()): lines.append(f"    {_clean_item_name(n)}: {q:,}")
     else:
         lines.append("")
         for cat in sorted(sessions[0].get("loots",{})):
-            lines.append(f"  [{cat}]")
-            for n,q in sorted(sessions[0]["loots"][cat].items()): lines.append(f"    {n}: {q:,}")
+            cat_items = sessions[0]["loots"][cat]
+            lines.append(f"  [{cat}] ({sum(cat_items.values()):,})")
+            if cat == "Unidentified Items": continue
+            for n,q in sorted(cat_items.items()): lines.append(f"    {_clean_item_name(n)}: {q:,}")
     lines.append("```"); return "\n".join(lines)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -689,6 +702,12 @@ class LoadingModal(tk.Toplevel):
         px=parent.winfo_x()+parent.winfo_width()//2-w//2
         py=parent.winfo_y()+parent.winfo_height()//2-h//2
         self.geometry(f"{w}x{h}+{px}+{py}")
+        # Appliquer icône OMT après initialisation
+        try:
+            ico = str(ASSETS_DIR / "O-MTSmall.ico")
+            self.after(250, lambda: self.iconbitmap(ico) if self.winfo_exists() else None)
+        except Exception:
+            pass
         border=tk.Frame(self,bg=GOLD,bd=2); border.pack(fill="both",expand=True,padx=2,pady=2)
         inner=tk.Frame(border,bg=BG); inner.pack(fill="both",expand=True)
         tk.Label(inner,text="Loading Logs",bg=BG,fg=GOLD_LT,font=("Georgia",15,"bold")).pack(pady=(18,4))
@@ -1014,56 +1033,77 @@ class App(ctk.CTk):
         except Exception: pass
 
     def _open_feedback(self):
-        """Show feedback modal directly in the app."""
+        """Show feedback modal — 4 types : Bug / Suggestion / Location / Other."""
         modal = tk.Toplevel(self)
         modal.title("Feedback")
         modal.configure(bg=BG)
         modal.resizable(False, False)
         modal.grab_set()
         modal.protocol("WM_DELETE_WINDOW", modal.destroy)
-        w, h = 480, 520
+        w, h = 500, 580
         x = self.winfo_rootx() + (self.winfo_width()  - w) // 2
         y = self.winfo_rooty() + (self.winfo_height() - h) // 2
         modal.geometry(f"{w}x{h}+{x}+{y}")
+        try:
+            ico = str(ASSETS_DIR / "O-MTSmall.ico")
+            modal.after(250, lambda: modal.iconbitmap(ico) if modal.winfo_exists() else None)
+        except Exception:
+            pass
 
         # Header
         hdr = ctk.CTkFrame(modal, fg_color=BG2, corner_radius=0)
         hdr.pack(fill="x")
-        ctk.CTkLabel(hdr, text="⚔  O-MT Feedback",
+        ctk.CTkLabel(hdr, text="\u2694  O-MT Feedback",
                      font=("Georgia", 16, "bold"), text_color=GOLD_LT,
                      fg_color=BG2).pack(pady=(14,2))
-        ctk.CTkLabel(hdr, text="Report a bug or share a suggestion",
+        ctk.CTkLabel(hdr, text="Report a bug, share a suggestion or a location",
                      font=F_SMALL, text_color=DIM2, fg_color=BG2).pack(pady=(0,12))
         ctk.CTkFrame(hdr, fg_color=GOLD_DK, height=1).pack(fill="x")
 
         scroll_frame = ctk.CTkScrollableFrame(modal, fg_color=BG, corner_radius=0)
         scroll_frame.pack(fill="both", expand=True, padx=16, pady=12)
 
-        # Type selection
+        # Type selection — 4 boutons sur 2 lignes (2×2)
         ctk.CTkLabel(scroll_frame, text="Type", font=F_BODY, text_color=DIM2,
                      anchor="w").pack(fill="x", pady=(0,6))
         type_var = tk.StringVar(value="")
-        type_row = ctk.CTkFrame(scroll_frame, fg_color="transparent")
-        type_row.pack(fill="x", pady=(0,12))
+        type_grid = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+        type_grid.pack(fill="x", pady=(0,4))
         type_btns = {}
+
+        TYPES = [
+            ("Bug",        "\U0001f41b", "Report a bug",          13395012),   # rouge
+            ("Suggestion", "\U0001f4a1", "Share an idea",          3066993),   # vert
+            ("Location",   "\U0001f4cd", "Share a map location",   3066993),   # vert
+            ("Other",      "\U0001f4dd", "Anything else",          5604556),   # gris-bleu
+        ]
+
         def select_type(t):
             type_var.set(t)
             for k, b in type_btns.items():
                 b.configure(fg_color=GOLD if k==t else BG3,
                             text_color="#050505" if k==t else DIM2,
                             border_color=GOLD if k==t else BORDER)
-        for i, (label, emoji) in enumerate([("Bug","🐛"), ("Suggestion","💡"), ("Other","📝")]):
-            b = ctk.CTkButton(type_row, text=f"{emoji}  {label}", width=134, height=38,
+
+        for idx, (label, emoji, subtitle, _color) in enumerate(TYPES):
+            col = idx % 2
+            row = idx // 2
+            cell = ctk.CTkFrame(type_grid, fg_color="transparent")
+            cell.grid(row=row, column=col, padx=(0,6) if col==0 else 0, pady=(0,6), sticky="ew")
+            type_grid.columnconfigure(col, weight=1)
+            b = ctk.CTkButton(cell, text=f"{emoji}  {label}", width=220, height=40,
                               fg_color=BG3, text_color=DIM2, hover_color=BG4,
                               border_width=1, border_color=BORDER, corner_radius=6,
                               font=F_BODY, command=lambda t=label: select_type(t))
-            b.grid(row=0, column=i, padx=(0,6) if i<2 else 0)
+            b.pack(fill="x")
+            ctk.CTkLabel(cell, text=subtitle, font=F_SMALL, text_color=DIM2,
+                         anchor="center", justify="center").pack(pady=(2,0))
             type_btns[label] = b
 
         # Description
         ctk.CTkLabel(scroll_frame, text="Description", font=F_BODY, text_color=DIM2,
-                     anchor="w").pack(fill="x", pady=(0,6))
-        desc_box = ctk.CTkTextbox(scroll_frame, height=110, font=F_BODY,
+                     anchor="w").pack(fill="x", pady=(8,6))
+        desc_box = ctk.CTkTextbox(scroll_frame, height=100, font=F_BODY,
                                    fg_color=BG3, border_color=BORDER, border_width=1)
         desc_box.pack(fill="x", pady=(0,12))
 
@@ -1072,7 +1112,7 @@ class App(ctk.CTk):
                      text_color=DIM2, anchor="w").pack(fill="x", pady=(0,6))
         pseudo_entry = ctk.CTkEntry(scroll_frame, placeholder_text="Your character name",
                                     height=36, font=F_BODY)
-        pseudo_entry.pack(fill="x", pady=(0,16))
+        pseudo_entry.pack(fill="x", pady=(0,12))
 
         # Status label
         status_lbl = ctk.CTkLabel(scroll_frame, text="", font=F_SMALL,
@@ -1084,25 +1124,26 @@ class App(ctk.CTk):
             version = APP_VERSION
             desc    = desc_box.get("1.0", "end").strip()
             pseudo  = pseudo_entry.get().strip() or "Anonymous"
-            if not ftype: status_lbl.configure(text="⚠ Please select a type.", text_color="#cc4444"); return
-            if not desc:  status_lbl.configure(text="⚠ Please add a description.", text_color="#cc4444"); return
+            if not ftype: status_lbl.configure(text="\u26a0 Please select a type.", text_color="#cc4444"); return
+            if not desc:  status_lbl.configure(text="\u26a0 Please add a description.", text_color="#cc4444"); return
 
             send_btn.configure(state="disabled", text="Sending...")
             status_lbl.configure(text="", text_color=DIM2)
 
-            emojis = {"Bug":"🐛","Suggestion":"💡","Other":"📝"}
-            colors = {"Bug":13395012,"Suggestion":13145898,"Other":5604556}
+            type_data = {t[0]: (t[1], t[3]) for t in TYPES}
+            emoji, color = type_data.get(ftype, ("\U0001f4dd", 5604556))
+
             import urllib.request as _ur, json as _json, ssl as _ssl
             payload = _json.dumps({"embeds":[{
-                "title": f"{emojis.get(ftype,'📝')}  New Feedback — {ftype}",
+                "title": f"{emoji}  New Feedback — {ftype}",
                 "description": desc,
-                "color": colors.get(ftype, 8947848),
+                "color": color,
                 "fields": [
                     {"name":"Version","value":version,"inline":True},
                     {"name":"Type",   "value":ftype,  "inline":True},
                     {"name":"Player", "value":pseudo, "inline":True}
                 ],
-                "footer":{"text":f"OMT Feedback • {__import__('datetime').datetime.now().strftime('%d/%m/%Y %H:%M')}"}
+                "footer":{"text":f"OMT Feedback \u2022 {__import__('datetime').datetime.now().strftime('%d/%m/%Y %H:%M')}"}
             }]}).encode()
 
             def do_send():
@@ -1113,29 +1154,26 @@ class App(ctk.CTk):
                     req = _ur.Request(
                         "https://discord.com/api/webhooks/1510977027895984149/85LKfte18fOibmEbrLEo4OkLcVEvjR57NeTSlHywsKaluLAlzV92vrK4Oc4s0dp_RU1S",
                         data=payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "User-Agent": "OMT-Feedback/1.0"
-                        },
+                        headers={"Content-Type":"application/json","User-Agent":"OMT-Feedback/1.0"},
                         method="POST")
                     with _ur.urlopen(req, timeout=10, context=ctx) as r:
                         ok = r.status in (200, 204, 201)
                     if ok:
                         self.after(0, lambda: (
-                            status_lbl.configure(text="✓ Feedback sent! Thank you.", text_color="#80c080"),
-                            send_btn.configure(state="disabled", text="Sent ✓",
+                            status_lbl.configure(text="\u2713 Feedback sent! Thank you.", text_color="#80c080"),
+                            send_btn.configure(state="disabled", text="Sent \u2713",
                                                fg_color="#1a4a1a", text_color="#80c080")
-                        ))
+                        ) if modal.winfo_exists() else None)
                     else:
                         self.after(0, lambda: (
-                            status_lbl.configure(text="⚠ Error sending. Please try again.", text_color="#cc4444"),
+                            status_lbl.configure(text="\u26a0 Error sending. Please try again.", text_color="#cc4444"),
                             send_btn.configure(state="normal", text="Send Feedback")
-                        ))
+                        ) if modal.winfo_exists() else None)
                 except Exception as e:
                     self.after(0, lambda err=str(e): (
-                        status_lbl.configure(text=f"⚠ {err[:60]}", text_color="#cc4444"),
+                        status_lbl.configure(text=f"\u26a0 {err[:60]}", text_color="#cc4444"),
                         send_btn.configure(state="normal", text="Send Feedback")
-                    ))
+                    ) if modal.winfo_exists() else None)
             threading.Thread(target=do_send, daemon=True).start()
 
         # Buttons row
@@ -1232,6 +1270,21 @@ class App(ctk.CTk):
                 self._main_icon_ph = ph  # persist reference
                 self.iconphoto(True, ph)
                 self.after(500, lambda: self.iconphoto(True, ph))
+
+        # Reappliquer l icone OMT quand la fenetre recupere le focus
+        # CTk remplace l icone par sa plume quand un CTkToplevel s ouvre
+        def _reapply_main_icon(event=None):
+            try:
+                if hasattr(self, "_main_icon_path"):
+                    self.iconbitmap(self._main_icon_path)
+                elif hasattr(self, "_main_icon_ph"):
+                    self.iconphoto(True, self._main_icon_ph)
+            except Exception:
+                pass
+        self._reapply_main_icon = _reapply_main_icon
+        self.bind("<FocusIn>", _reapply_main_icon)
+        self.bind("<Map>", _reapply_main_icon)
+        self.after(1000, _reapply_main_icon)
 
         # ── Nav bar (black background to match O-MTMedium) ────────────────────
         nav=ctk.CTkFrame(self, fg_color=NAV_BG, height=60, corner_radius=0)
@@ -1387,7 +1440,14 @@ class App(ctk.CTk):
                      font=("Georgia",17,"bold"),text_color=GOLD_LT,anchor="w").pack(fill="x",padx=16,pady=(14,4))
         ctk.CTkFrame(news,fg_color=GOLD_DK,height=1).pack(fill="x",padx=16,pady=(0,10))
         changelog=load_json(CONFIG_DIR/"changelog.json",[])
-        CAT_COLORS = {"NEW FEATURE": "#00dd88", "IMPROVEMENT": GOLD_LT, "BUG FIX": "#cc6644"}
+        CAT_COLORS = {
+            "NEW ZONE":    "#b47fff",
+            "NEW FEATURE": "#00dd88",
+            "IMPROVEMENT": GOLD_LT,
+            "BUG FIX":     "#cc6644",
+            "SECURITY":    "#cc2222",
+        }
+        CAT_ORDER = ["NEW ZONE", "NEW FEATURE", "IMPROVEMENT", "BUG FIX", "SECURITY"]
         if not changelog:
             ctk.CTkLabel(news,text="  No changelog available.",font=("Segoe UI",13),text_color=DIM2).pack(anchor="w",padx=20,pady=8)
         else:
@@ -1442,7 +1502,8 @@ class App(ctk.CTk):
                             if cat not in cat_items: cat_items[cat] = []
                             cat_items[cat].extend(items)
 
-                for cat, items in cat_items.items():
+                for cat in sorted(cat_items.keys(), key=lambda c: CAT_ORDER.index(c) if c in CAT_ORDER else 99):
+                    items = cat_items[cat]
                     ctk.CTkLabel(panel, text=f"    {cat}",
                                  font=("Segoe UI",11,"bold"),
                                  text_color=CAT_COLORS.get(cat, DIM2),
@@ -1858,7 +1919,7 @@ class App(ctk.CTk):
             else:
                 for item,qty in sorted(loots[cat].items()):
                     rf=ctk.CTkFrame(itf,fg_color="transparent"); rf.pack(fill="x",padx=8,pady=1)
-                    ctk.CTkLabel(rf,text=item,text_color=TEXT,font=F_SMALL,anchor="w").pack(side="left")
+                    ctk.CTkLabel(rf,text=_clean_item_name(item),text_color=TEXT,font=F_SMALL,anchor="w").pack(side="left")
                     ctk.CTkLabel(rf,text=f"×{qty:,}",text_color=GOLD_LT,font=F_SMALL_B,anchor="e").pack(side="right",padx=2)
 
             def tog(a=arr,i=itf,o=ost,c=card):
@@ -1886,6 +1947,11 @@ class App(ctk.CTk):
         modal.grab_set()
         modal.configure(bg=BG)
         modal.protocol("WM_DELETE_WINDOW", modal.destroy)
+        try:
+            ico = str(ASSETS_DIR / "O-MTSmall.ico")
+            modal.after(250, lambda: modal.iconbitmap(ico) if modal.winfo_exists() else None)
+        except Exception:
+            pass
         modal.update_idletasks()
         w,h=360,160
         x=self.winfo_rootx()+(self.winfo_width()-w)//2
@@ -1945,14 +2011,17 @@ class App(ctk.CTk):
             save_json(XP_F,self.xp_db)
             total_s=len(self.sessions)
             # Auto-upload new sessions if Upload All is enabled
-            if new_s and self._guild_session_token and self.settings.get("guild_upload_all"):
+            if new_s and getattr(self, "_guild_session_token", None) and self.settings.get("guild_upload_all"):
                 self.after(500, self._guild_upload_all)
             self.after(0,lambda ns=len(new_s),ts=total_s,tf=len(files):self._load_done(modal,ns,ts,tf))
         threading.Thread(target=do_load,daemon=True).start()
 
     def _load_done(self,modal,new_s,total_s,total_files):
-        try: modal.destroy()
-        except: pass
+        try:
+            modal.grab_release()  # libérer le grab avant destroy
+            modal.destroy()
+        except Exception:
+            pass
         self._refresh()
         def _show():
             self.lift(); self.focus_force()
@@ -2003,40 +2072,52 @@ class App(ctk.CTk):
     def _build_xp(self):
         page=ctk.CTkFrame(self._body,fg_color=BG,corner_radius=0)
         self._pages["Experience"]=page
-        # ── Filter bar ───────────────────────────────────────────────────────
-        fbar=ctk.CTkFrame(page,fg_color=BG2,height=54,corner_radius=0); fbar.pack(fill="x"); fbar.pack_propagate(False)
-        ctk.CTkFrame(fbar,fg_color=GOLD_DK,height=1,corner_radius=0).place(relx=0,rely=1.0,relwidth=1.0,anchor="sw")
-        self._xget_from,self._xget_to,_=date_row(fbar,self._refresh_xp,self._all_time_xp)
-        ctk.CTkLabel(fbar,text="  View:",text_color=DIM2,font=F_BODY).pack(side="left",padx=(16,4))
-        self._xp_view=tk.StringVar(value="month")
-        for label,val in [("Monthly","month"),("Daily","day"),("Hourly","hour")]:
-            ctk.CTkRadioButton(fbar,text=label,variable=self._xp_view,value=val,
-                               font=F_SMALL,text_color=TEXT,fg_color=GOLD,hover_color=GOLD_LT,
-                               command=self._draw_xp).pack(side="left",padx=6)
-        # Export / Discord buttons packed FIRST on right so they're always visible
-        dim_btn(fbar,"Copy Discord",self._xp_discord,w=118).pack(side="right",padx=4)
-        dim_btn(fbar,"Export CSV",  self._xp_csv,    w=105).pack(side="right",padx=2)
-        ctk.CTkLabel(fbar,text="  Character:",text_color=DIM2,font=F_BODY).pack(side="left",padx=(16,4))
-        # Scrollable character bar — fills remaining space between left labels and right buttons
-        self._xp_cbar=ctk.CTkScrollableFrame(fbar,fg_color="transparent",height=40,orientation="horizontal")
-        self._xp_cbar.pack(side="left",fill="x",expand=True,padx=(0,4))
-        self._xp_chars=set()
-        # ── Chart — fills most of the page ───────────────────────────────────
+        # ── Ligne 1 : Date range | View | Aspect Detail ──────────────────────
+        bar1 = ctk.CTkFrame(page, fg_color=BG2, height=48, corner_radius=0)
+        bar1.pack(fill="x"); bar1.pack_propagate(False)
+        self._xget_from, self._xget_to, _ = date_row(bar1, self._refresh_xp, self._all_time_xp)
+        ctk.CTkFrame(bar1, fg_color=BORDER, width=1, corner_radius=0).pack(side="left", fill="y", pady=8, padx=4)
+        ctk.CTkLabel(bar1, text="  View:", text_color=DIM2, font=F_BODY).pack(side="left", padx=(8,4))
+        self._xp_view = tk.StringVar(value="day")
+        for label, val in [("Monthly","month"), ("Daily","day"), ("Hourly","hour")]:
+            ctk.CTkRadioButton(bar1, text=label, variable=self._xp_view, value=val,
+                               font=F_SMALL, text_color=TEXT, fg_color=GOLD, hover_color=GOLD_LT,
+                               command=self._draw_xp).pack(side="left", padx=6)
+        ctk.CTkFrame(bar1, fg_color=BORDER, width=1, corner_radius=0).pack(side="left", fill="y", pady=8, padx=8)
+        self._xp_detail = tk.BooleanVar(value=False)
+        ctk.CTkCheckBox(bar1, text="Aspect Detail", variable=self._xp_detail,
+                        font=F_SMALL, text_color=DIM2, fg_color=GOLD_DK,
+                        checkmark_color=GOLD, hover_color=BG3,
+                        command=self._draw_xp).pack(side="left", padx=8)
+        ctk.CTkFrame(bar1, fg_color=GOLD_DK, height=1, corner_radius=0).place(relx=0, rely=1.0, relwidth=1.0, anchor="sw")
+
+        # ── Ligne 2 : Character | Export / Discord ───────────────────────────
+        bar2 = ctk.CTkFrame(page, fg_color=BG2, height=44, corner_radius=0)
+        bar2.pack(fill="x"); bar2.pack_propagate(False)
+        ctk.CTkLabel(bar2, text="  Character:", text_color=DIM2, font=F_BODY).pack(side="left", padx=(16,4))
+        self._xp_cbar = ctk.CTkScrollableFrame(bar2, fg_color="transparent", height=36, orientation="horizontal")
+        self._xp_cbar.pack(side="left", fill="x", expand=True, padx=(0,4))
+        dim_btn(bar2, "Copy Discord", self._xp_discord, w=118).pack(side="right", padx=4, pady=4)
+        dim_btn(bar2, "Export CSV",   self._xp_csv,     w=105).pack(side="right", padx=2, pady=4)
+        ctk.CTkFrame(bar2, fg_color=GOLD_DK, height=1, corner_radius=0).place(relx=0, rely=1.0, relwidth=1.0, anchor="sw")
+        self._xp_chars = set()
+        # Chart
         self._xp_chart=ctk.CTkFrame(page,fg_color=BG)
         self._xp_chart.pack(fill="both",expand=True,pady=(8,4))
-        # ── Table — centered, fixed width below chart ─────────────────────────
+        # Table
         self._xp_table=ctk.CTkScrollableFrame(page,fg_color=BG2,height=220,
                                                border_width=1,border_color=BORDER,
                                                width=800)
         self._xp_table.pack(anchor="center",pady=(0,8))
-        self._refresh_xp()
+        self._all_time_xp()  # All Time + All Characters par defaut
 
     def _all_time_xp(self):
         players=sorted(set(e["player"] for e in self.xp_events if e.get("player")))
         self._xp_chars=set(players)
-        self._draw_xp(ignore_dates=True)
+        self._refresh_xp(skip_draw=True)  # reconstruit les boutons sans redessiner
+        self._draw_xp(ignore_dates=True)   # force all-time en un seul rendu
 
-    def _refresh_xp(self):
+    def _refresh_xp(self, skip_draw=False):
         for w in self._xp_cbar.winfo_children(): w.destroy()
         players=sorted(set(e["player"] for e in self.xp_events if e.get("player")))
         # All button
@@ -2054,7 +2135,7 @@ class App(ctk.CTk):
                           hover_color=GOLD_LT,corner_radius=4,font=F_BODY,
                           border_width=1,border_color=BORDER,
                           command=lambda n=p:self._tog_xp(n)).pack(side="left",padx=2)
-        self._draw_xp()
+        if not skip_draw: self._draw_xp()
 
     def _tog_xp_all(self):
         players=sorted(set(e["player"] for e in self.xp_events if e.get("player")))
@@ -2132,21 +2213,38 @@ class App(ctk.CTk):
         # Store bar info for tooltip
         bar_data = []  # list of (bar_artist, asp_name, val) for tooltip
 
-        for asp in aspects:
-            vals = np.array([bucket_asp[m].get(asp, 0) for m in buckets])
-            bars = ax.bar(x, vals, bottom=bottoms, label=asp,
-                          color=ASPECT_COLORS.get(asp, "#888"),
-                          width=0.78, edgecolor="none")
-            for bar, val, bot in zip(bars, vals, bottoms):
-                bar_data.append((bar, asp, val))
-                if val > 0 and bar.get_height() > 300:
-                    ax.text(bar.get_x() + bar.get_width() / 2,
-                            bot + bar.get_height() / 2,
-                            f"{asp}\n{int(val):,}",
-                            ha="center", va="center",
-                            fontsize=6, color="#000000",
-                            fontweight="bold", clip_on=True)
-            bottoms += vals
+        show_detail = getattr(self, "_xp_detail", None) and self._xp_detail.get()
+
+        if not show_detail:
+            # Mode simple : une seule barre doree = XP total
+            totals = np.array([sum(bucket_asp[m].values()) for m in buckets])
+            bars = ax.bar(x, totals, color=GOLD_DK, width=0.78, edgecolor="none", label="XP")
+            for bar, val in zip(bars, totals):
+                bar_data.append((bar, "XP", val))
+            # Labels au-dessus des barres
+            ax.bar_label(bars,
+                         labels=[f"{int(v):,}" if v > 0 else "" for v in totals],
+                         padding=4,
+                         color=GOLD_LT,
+                         fontsize=8,
+                         fontweight="bold")
+        else:
+            # Mode detail : barres empilees par aspect
+            for asp in aspects:
+                vals = np.array([bucket_asp[m].get(asp, 0) for m in buckets])
+                bars = ax.bar(x, vals, bottom=bottoms, label=asp,
+                              color=ASPECT_COLORS.get(asp, "#888"),
+                              width=0.78, edgecolor="none")
+                for bar, val, bot in zip(bars, vals, bottoms):
+                    bar_data.append((bar, asp, val))
+                    if val > 0 and bar.get_height() > 300:
+                        ax.text(bar.get_x() + bar.get_width() / 2,
+                                bot + bar.get_height() / 2,
+                                f"{asp}\n{int(val):,}",
+                                ha="center", va="center",
+                                fontsize=6, color="#000000",
+                                fontweight="bold", clip_on=True)
+                bottoms += vals
 
         lbl_map = {"month": "Monthly", "day": "Daily", "hour": "Hourly"}
         title = ", ".join(sorted(self._xp_chars)) or "All"
@@ -2405,6 +2503,12 @@ class App(ctk.CTk):
     def _build_guild(self):
         if not hasattr(self, "_guild_cache"): self._guild_cache = {}
         if not hasattr(self, "_members_cache"): self._members_cache = {}
+        if not hasattr(self, "_guild_active_id"): self._guild_active_id = None
+        page = ctk.CTkFrame(self._body, fg_color=BG, corner_radius=0)
+        self._pages["Guild"] = page
+        self._guild_session_token = self._load_guild_token()
+        self._guild_page = page
+        self._guild_render()
 
     def _guild_cache_get(self, key: str):
         """Return cached value if within TTL, else None."""
@@ -2418,11 +2522,7 @@ class App(ctk.CTk):
         """Store value in cache with current timestamp."""
         import time
         self._guild_cache[key] = (time.time(), value)
-        page = ctk.CTkFrame(self._body, fg_color=BG, corner_radius=0)
-        self._pages["Guild"] = page
-        self._guild_session_token = self._load_guild_token()
-        self._guild_page = page
-        self._guild_render()
+
     def _load_guild_token(self) -> str | None:
         """Load persisted session token from settings."""
         return self.settings.get("guild_token")
@@ -2437,7 +2537,6 @@ class App(ctk.CTk):
 
     def _guild_render(self):
         """Render Guild state — async token check to avoid blocking main thread."""
-        import threading
         for w in self._guild_page.winfo_children(): w.destroy()
         if not self._guild_session_token:
             self._guild_state_login()
@@ -2583,6 +2682,7 @@ class App(ctk.CTk):
             m = guild_map[gname]
             guild_id  = m["guild_id"]
             omt_grade = m["omt_grade"]
+            self._guild_active_id = guild_id  # stocker la guilde active
 
             ctk.CTkFrame(nav_guild_zone, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(4,4))
 
@@ -2607,27 +2707,32 @@ class App(ctk.CTk):
                 _activate(f"members_{guild_id}", lambda gid=guild_id: self._guild_show_members(gid))
 
         if len(guild_names) > 1:
-            # Dropdown visible seulement si plusieurs guildes
-            ctk.CTkFrame(nav, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(8,4))
+            # Dropdown guild — style distinctif en haut du nav
+            ctk.CTkFrame(nav, fg_color=GOLD_DK, height=1).pack(fill="x", padx=0, pady=(0,0))
             guild_var = ctk.StringVar(value=guild_names[0])
             ctk.CTkOptionMenu(
                 nav, variable=guild_var,
                 values=guild_names,
-                fg_color=BG3, button_color=GOLD_DK,
-                button_hover_color=GOLD, text_color=TEXT,
+                fg_color=BG4, button_color=GOLD_DK,
+                button_hover_color=GOLD, text_color=GOLD_LT,
                 dropdown_fg_color=BG2, dropdown_text_color=TEXT,
                 dropdown_hover_color=BG3,
-                font=F_SMALL, width=178,
+                font=F_BODY_B, width=190,
+                dynamic_resizing=False,
                 command=_render_guild_nav
-            ).pack(padx=6, pady=(2,4))
+            ).pack(padx=0, pady=0, fill="x")
+            ctk.CTkFrame(nav, fg_color=GOLD_DK, height=1).pack(fill="x", padx=0, pady=(0,4))
         elif guild_names:
-            # Une seule guilde — afficher le nom en label
-            ctk.CTkFrame(nav, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(8,2))
-            ctk.CTkLabel(nav, text=f"  \u2694  {guild_names[0][:18]}",
-                         text_color=GOLD, font=F_SMALL_B, anchor="w").pack(fill="x", padx=4, pady=(2,0))
+            # Une seule guilde — label distinctif pleine largeur
+            ctk.CTkFrame(nav, fg_color=GOLD_DK, height=1).pack(fill="x", padx=0)
+            ctk.CTkLabel(nav, text=f"  ⚔  {guild_names[0][:18]}",
+                         text_color=GOLD_LT, font=F_BODY_B, anchor="w",
+                         fg_color=BG4).pack(fill="x", padx=0, pady=0, ipady=8)
+            ctk.CTkFrame(nav, fg_color=GOLD_DK, height=1).pack(fill="x", padx=0, pady=(0,4))
 
         # Render initial avec la première guilde
         if guild_names:
+            self._guild_active_id = guild_map[guild_names[0]]["guild_id"]
             _render_guild_nav(guild_names[0])
 
         # Personal section — toujours visible en bas
@@ -2670,7 +2775,6 @@ class App(ctk.CTk):
             self.after(10, lambda: _render(self._members_cache[guild_id]))
         else:
             self._guild_content_loading("  \U0001f465  Members")
-        import threading
 
         def _load():
             try:
@@ -2709,6 +2813,7 @@ class App(ctk.CTk):
                 BATCH_M = 20
                 state_m = {"idx": 0}
                 def _render_member_batch(members=members):
+                    if not scroll.winfo_exists(): return  # navigation pendant le rendu
                     batch_end = min(state_m["idx"] + BATCH_M, len(members))
                     for mbr in members[state_m["idx"]:batch_end]:
                         mbr_wrap = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -2749,7 +2854,6 @@ class App(ctk.CTk):
 
     def _guild_member_characters(self, user_id: str, row_frame=None, chars_wrap=None, btn=None, guild_id: str = None):
         """Déplie/replie les personnages d'un membre inline dans la liste."""
-        import threading
         if chars_wrap is None: return  # appelé sans contexte — ignorer
 
         # Toggle — pack/unpack le frame
@@ -2832,7 +2936,6 @@ class App(ctk.CTk):
     # ── Bot page ──────────────────────────────────────────────────────────────
     def _guild_show_bot(self, guild_id: str):
         self._guild_content_loading("  \U0001f916  Bot")
-        import threading
 
         def _load():
             try:
@@ -2865,13 +2968,16 @@ class App(ctk.CTk):
             ctk.CTkFrame(self._guild_content, fg_color=BORDER, height=1).pack(fill="x", padx=40, pady=(8, 16))
             # ── Invite ────────────────────────────────────────────────────────
             def _invite():
-                import webbrowser
-                try:
-                    d = self._guild_api("GET", "/guild/bot-invite-url",
-                                        params={"server_id": guild_id})
-                    webbrowser.open(d["url"])
-                except Exception as e:
-                    messagebox.showerror("Error", str(e))
+                import webbrowser, threading
+                def _do():
+                    try:
+                        d = self._guild_api("GET", "/guild/bot-invite-url",
+                                            params={"server_id": guild_id})
+                        self.after(0, lambda u=d["url"]: webbrowser.open(u))
+                    except Exception as e:
+                        err = str(e)
+                        self.after(0, lambda m=err: messagebox.showerror("Error", m))
+                threading.Thread(target=_do, daemon=True).start()
             gold_btn(self._guild_content, "\U0001f517  Invite Bot", _invite, w=200, h=42).pack(pady=4)
             ctk.CTkLabel(self._guild_content,
                          text="After inviting, click Bot again to refresh status.",
@@ -2909,7 +3015,6 @@ class App(ctk.CTk):
     # ── Guild Admin page ──────────────────────────────────────────────────────
     def _guild_show_admin(self, guild_id: str):
         self._guild_content_loading("  \U0001f451  Guild Admin")
-        import threading
         all_roles      = []
         mappings_state = {}
         grades_state   = []
@@ -3294,7 +3399,6 @@ class App(ctk.CTk):
     # ── My Characters ─────────────────────────────────────────────────────────
     def _guild_show_characters(self):
         """My Characters — liste + ajout/édition/suppression de personnages."""
-        import threading
         self._guild_content_header("  🎮  My Characters")
         me      = getattr(self, "_guild_me", {})
         user_id = me.get("id", "")
@@ -3341,6 +3445,7 @@ class App(ctk.CTk):
             if not guild_id:
                 _set_status("No guild selected.", DIM2)
                 return
+            self._guild_chars_cache = []  # reset avant rechargement
             try:
                 # GET /guild/{id}/characters retourne ses propres persos
                 # + ceux des autres si view_characters/manage_characters/leader/SA
@@ -3528,7 +3633,6 @@ class App(ctk.CTk):
 
     def _guild_char_dialog_add(self, guild_id: str, on_done):
         """Dialogue d'ajout de personnage — méthode de classe pour maintenabilité."""
-        import threading
         ROLE_COLORS = {"pvp":"#5B9BD5","pvm":"#FFD700","pk":"#E05050","harvester":"#7EC88A","crafter":"#B57FD8"}
         ROLE_LABELS = {"pvp":"PvP","pvm":"PvM","pk":"PK","harvester":"Harv.","crafter":"Craft."}
         win = ctk.CTkToplevel(self)
@@ -3574,17 +3678,16 @@ class App(ctk.CTk):
                     self._guild_api("POST", f"/guild/{guild_id}/characters",
                                     body={"name": name, "account_number": acc, "roles": roles},
                                     params={"token": self._guild_session_token})
-                    self.after(0, lambda: [win.destroy(), threading.Thread(target=on_done, daemon=True).start()])
+                    self.after(0, lambda: win.winfo_exists() and [win.destroy(), threading.Thread(target=on_done, daemon=True).start()])
                 except RuntimeError as e:
                     msg = str(e)
-                    self.after(0, lambda m=msg: err_lbl.configure(text=m))
+                    self.after(0, lambda m=msg: win.winfo_exists() and err_lbl.configure(text=m))
             threading.Thread(target=_req, daemon=True).start()
         ctk.CTkButton(win, text="Add Character", fg_color=GOLD_DK, hover_color=GOLD,
                       text_color=BG, font=F_BODY_B, command=_do_add).pack(padx=16, pady=4, fill="x")
 
     def _guild_char_dialog_edit(self, guild_id: str, c: dict, on_done):
         """Dialogue d'édition de personnage."""
-        import threading
         ROLE_COLORS = {"pvp":"#5B9BD5","pvm":"#FFD700","pk":"#E05050","harvester":"#7EC88A","crafter":"#B57FD8"}
         ROLE_LABELS = {"pvp":"PvP","pvm":"PvM","pk":"PK","harvester":"Harv.","crafter":"Craft."}
         win = ctk.CTkToplevel(self)
@@ -3632,17 +3735,16 @@ class App(ctk.CTk):
                     self._guild_api("PUT", f"/guild/{guild_id}/characters/{c['id']}/roles",
                                     body={"roles": roles},
                                     params={"token": self._guild_session_token})
-                    self.after(0, lambda: [win.destroy(), threading.Thread(target=on_done, daemon=True).start()])
+                    self.after(0, lambda: win.winfo_exists() and [win.destroy(), threading.Thread(target=on_done, daemon=True).start()])
                 except RuntimeError as e:
                     msg = str(e)
-                    self.after(0, lambda m=msg: err_lbl.configure(text=m))
+                    self.after(0, lambda m=msg: win.winfo_exists() and err_lbl.configure(text=m))
             threading.Thread(target=_req, daemon=True).start()
         ctk.CTkButton(win, text="Save Changes", fg_color=GOLD_DK, hover_color=GOLD,
                       text_color=BG, font=F_BODY_B, command=_do_edit).pack(padx=16, pady=4, fill="x")
 
     def _guild_char_dialog_rename(self, guild_id: str, acc_num: int, current_label: str, on_done):
         """Dialogue de renommage de compte."""
-        import threading
         win = ctk.CTkToplevel(self)
         win.title("Rename Account"); win.geometry("340x180")
         win.configure(fg_color=BG); win.grab_set()
@@ -3666,17 +3768,16 @@ class App(ctk.CTk):
                         self._guild_api("PATCH", f"/guild/{guild_id}/characters/{ch['id']}",
                                         body={"account_label": new_label or ""},
                                         params={"token": self._guild_session_token})
-                    self.after(0, lambda: [win.destroy(), threading.Thread(target=on_done, daemon=True).start()])
+                    self.after(0, lambda: win.winfo_exists() and [win.destroy(), threading.Thread(target=on_done, daemon=True).start()])
                 except RuntimeError as e:
                     msg = str(e)
-                    self.after(0, lambda m=msg: err_lbl.configure(text=m))
+                    self.after(0, lambda m=msg: win.winfo_exists() and err_lbl.configure(text=m))
             threading.Thread(target=_req, daemon=True).start()
         ctk.CTkButton(win, text="Rename", fg_color=GOLD_DK, hover_color=GOLD,
                       text_color=BG, font=F_BODY_B, command=_do_rename).pack(padx=16, pady=4, fill="x")
 
     def _guild_char_confirm_delete(self, guild_id: str, c: dict, on_done, set_status=None):
         """Confirmation de suppression de personnage."""
-        import threading
         from tkinter import messagebox
         if not messagebox.askyesno("Delete Character",
                 f"Delete '{c['name']}'?\nThis cannot be undone."):
@@ -3699,7 +3800,6 @@ class App(ctk.CTk):
         """Panneau SuperAdmin — accessible via bouton ⚡ dans la nav principale.
         Complètement séparé du système de guilde.
         """
-        import threading
         win = ctk.CTkToplevel(self)
         win.title("⚡ SuperAdmin Panel")
         win.geometry("820x600")
@@ -4049,18 +4149,19 @@ class App(ctk.CTk):
         if not selected:
             messagebox.showwarning("No selection", "Select sessions to upload.")
             return
-        memberships = getattr(self, "_guild_me", {}).get("memberships", [])
-        if not memberships:
+        guild_id = getattr(self, "_guild_active_id", None)
+        if not guild_id:
+            memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+            guild_id = memberships[0]["guild_id"] if memberships else None
+        if not guild_id:
             messagebox.showwarning("No guild", "You are not in a guild.")
             return
-        guild_id = memberships[0]["guild_id"]
         serialized = []
         for s in selected:
             ser = dict(s)
             if hasattr(ser.get("start"), "isoformat"): ser["start"] = ser["start"].isoformat()
             if hasattr(ser.get("end"),   "isoformat"): ser["end"]   = ser["end"].isoformat()
             serialized.append(ser)
-        import threading
         def _do():
             try:
                 r = self._guild_api("POST", f"/guild/{guild_id}/sessions/upload",
@@ -4120,11 +4221,12 @@ class App(ctk.CTk):
 
     def _toggle_upload(self, session_start: str, sess: dict):
         """Toggle upload state for a single session."""
-        memberships = getattr(self, "_guild_me", {}).get("memberships", [])
-        if not memberships: return
-        guild_id = memberships[0]["guild_id"]
+        guild_id = getattr(self, "_guild_active_id", None)
+        if not guild_id:
+            memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+            guild_id = memberships[0]["guild_id"] if memberships else None
+        if not guild_id: return
         uploaded = session_start in getattr(self, "_guild_uploaded_starts", set())
-        import threading
         if uploaded:
             def _del():
                 try:
@@ -4161,10 +4263,11 @@ class App(ctk.CTk):
 
     def _guild_sync_uploads(self):
         """Sync which sessions are uploaded — call once at startup if in a guild."""
-        memberships = getattr(self, "_guild_me", {}).get("memberships", [])
-        if not self._guild_session_token or not memberships: return
-        guild_id = memberships[0]["guild_id"]
-        import threading
+        guild_id = getattr(self, "_guild_active_id", None)
+        if not guild_id:
+            memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+            guild_id = memberships[0]["guild_id"] if memberships else None
+        if not self._guild_session_token or not guild_id: return
         def _fetch():
             try:
                 data = self._guild_api("GET", f"/guild/{guild_id}/sessions/my-uploads",
@@ -4176,16 +4279,17 @@ class App(ctk.CTk):
 
     def _guild_upload_all(self):
         """Upload all current sessions to guild."""
-        memberships = getattr(self, "_guild_me", {}).get("memberships", [])
-        if not memberships: return
-        guild_id = memberships[0]["guild_id"]
+        guild_id = getattr(self, "_guild_active_id", None)
+        if not guild_id:
+            memberships = getattr(self, "_guild_me", {}).get("memberships", [])
+            guild_id = memberships[0]["guild_id"] if memberships else None
+        if not guild_id: return
         serialized = []
         for s in self.sessions:
             ser = dict(s)
             if hasattr(ser.get("start"), "isoformat"): ser["start"] = ser["start"].isoformat()
             if hasattr(ser.get("end"),   "isoformat"): ser["end"]   = ser["end"].isoformat()
             serialized.append(ser)
-        import threading
         def _up():
             try:
                 # Upload in batches of 50
@@ -4209,7 +4313,7 @@ class App(ctk.CTk):
     def _guild_show_sessions(self, guild_id: str):
         """Main guild sessions view — all members' sessions newest first."""
         self._guild_content_loading("  📋  Sessions")
-        import threading, json as _json
+        import json as _json
         from datetime import datetime
 
         def _load():
@@ -4274,6 +4378,7 @@ class App(ctk.CTk):
             state = {"idx": 0, "current_day": None}
 
             def _render_batch():
+                if not scroll.winfo_exists(): return  # navigation pendant le rendu
                 batch_end = min(state["idx"] + BATCH, len(sessions_sorted))
                 for i in range(state["idx"], batch_end):
                     s   = sessions_sorted[i]
@@ -4375,7 +4480,6 @@ class App(ctk.CTk):
         if can_delete:
             def _del(sid=s["id"]):
                 if not messagebox.askyesno("Delete", "Delete this session?"): return
-                import threading
                 def _do():
                     try:
                         self._guild_api("DELETE", f"/guild/{guild_id}/sessions/{sid}",
@@ -4393,7 +4497,6 @@ class App(ctk.CTk):
     def _guild_show_player_sessions(self, guild_id: str, user_id: str, username: str):
         """Show all sessions for a specific player — with back button."""
         self._guild_content_loading(f"  👤  {username}")
-        import threading
 
         def _load():
             try:
@@ -4450,7 +4553,6 @@ class App(ctk.CTk):
         ctk.CTkFrame(win, fg_color=GOLD_DK, height=1).pack(fill="x", padx=20, pady=(0,8))
         status = ctk.CTkLabel(win, text="Loading...", text_color=DIM2, font=F_BODY)
         status.pack(pady=4)
-        import threading
 
         def _load():
             try:
@@ -4490,8 +4592,8 @@ class App(ctk.CTk):
                                 segmented_button_selected_hover_color=GOLD,
                                 text_color=TEXT)
             nb.pack(fill="both", expand=True, padx=16, pady=4)
-            t_global = nb.add("🌍 Global Top 10")
-            t_local  = nb.add("📍 By Location")
+            t_global = nb.add("\U0001f30d Global Top 10")
+            t_local  = nb.add("\U0001f4cd By Location & Type")
 
             # Global top 10
             sf_g = ctk.CTkScrollableFrame(t_global, fg_color="transparent")
@@ -4501,20 +4603,49 @@ class App(ctk.CTk):
             for i, s in enumerate(data.get("top_global",[]), 1):
                 _draw_top_row(sf_g, i, s)
 
-            # By location
+            # By Location & Type
             sf_l = ctk.CTkScrollableFrame(t_local, fg_color="transparent")
             sf_l.pack(fill="both", expand=True)
-            for loc, sessions in data.get("top_by_location",{}).items():
-                ctk.CTkLabel(sf_l, text=f"  📍 {loc}",
-                             font=F_BODY_B, text_color=GOLD, anchor="w").pack(fill="x", padx=8, pady=(8,2))
-                ctk.CTkFrame(sf_l, fg_color=BORDER, height=1).pack(fill="x", padx=8, pady=(0,2))
-                for i, s in enumerate(sessions, 1):
-                    _draw_top_row(sf_l, i, s)
+            cats = data.get("top_by_category", {})
+
+            CAT_ICONS = {
+                "Boating":    "\U0001f6a2",
+                "Harvesting": "\U0001f33f",
+                "Dungeon":    "\u2694",
+                "Wilderness": "\U0001f30d",
+                "Other":      "\U0001f4cd",
+            }
+
+            for cat_name in ["Boating", "Harvesting", "Dungeon", "Wilderness", "Other"]:
+                cat_data = cats.get(cat_name)
+                if not cat_data: continue
+                icon = CAT_ICONS.get(cat_name, "\U0001f4cd")
+
+                # En-tête catégorie
+                ctk.CTkLabel(sf_l, text=f"  {icon}  {cat_name}",
+                             font=F_HEAD, text_color=GOLD_LT, anchor="w"
+                             ).pack(fill="x", padx=8, pady=(12, 2))
+                ctk.CTkFrame(sf_l, fg_color=GOLD_DK, height=1
+                             ).pack(fill="x", padx=8, pady=(0, 4))
+
+                if isinstance(cat_data, list):
+                    # Boating / Harvesting / Other — liste directe
+                    for i, s in enumerate(cat_data, 1):
+                        _draw_top_row(sf_l, i, s)
+                elif isinstance(cat_data, dict):
+                    # Dungeon / Wilderness — sous-sections
+                    for sub_name, sub_sessions in cat_data.items():
+                        ctk.CTkLabel(sf_l, text=f"    \u25b6  {sub_name}",
+                                     font=F_BODY_B, text_color=GOLD, anchor="w"
+                                     ).pack(fill="x", padx=16, pady=(8, 2))
+                        ctk.CTkFrame(sf_l, fg_color=BORDER, height=1
+                                     ).pack(fill="x", padx=16, pady=(0, 2))
+                        for i, s in enumerate(sub_sessions, 1):
+                            _draw_top_row(sf_l, i, s)
 
         threading.Thread(target=_load, daemon=True).start()
 
     def _guild_logout(self):
-        import threading
         token = self._guild_session_token
         # Nettoyer l'état local immédiatement (pas besoin d'attendre le réseau)
         self._guild_session_token = None
@@ -4531,7 +4662,7 @@ class App(ctk.CTk):
 
     def _guild_load_avatar(self, parent, url, size=46):
         if not url: return
-        import threading, urllib.request, io
+        import urllib.request, io
         def _fetch():
             try:
                 req = urllib.request.Request(url, headers={"User-Agent":"OMT/1.0"})
@@ -4545,7 +4676,6 @@ class App(ctk.CTk):
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _guild_do_login(self):
-        import threading
         self._guild_status_lbl.configure(text="Connecting to Guild API...")
         def _fetch_url():
             try:
@@ -4697,7 +4827,7 @@ h2{color:#c8952a;margin:0 0 8px;}p{color:#aa9980;margin:0;}</style></head>
                             except RuntimeError as e:
                                 err_msg = str(e)
                                 self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
-                        import threading; threading.Thread(target=_do, daemon=True).start()
+                        threading.Thread(target=_do, daemon=True).start()
                     dim_btn(row, "Join as Leader", _join_leader, w=120, h=30).pack(side="right", padx=4, pady=4)
                 else:
                     def _create(sv=s):
@@ -4710,9 +4840,9 @@ h2{color:#c8952a;margin:0 0 8px;}p{color:#aa9980;margin:0;}</style></head>
                             except RuntimeError as e:
                                 err_msg = str(e)
                                 self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
-                        import threading; threading.Thread(target=_do, daemon=True).start()
+                        threading.Thread(target=_do, daemon=True).start()
                     gold_btn(row, "Create", _create, w=80, h=30).pack(side="right", padx=8, pady=4)
-        import threading; threading.Thread(target=_load, daemon=True).start()
+        threading.Thread(target=_load, daemon=True).start()
 
     def _guild_join_flow(self):
         win = ctk.CTkToplevel(self); win.title("Join a Guild"); win.geometry("480x460")
@@ -4755,9 +4885,9 @@ h2{color:#c8952a;margin:0 0 8px;}p{color:#aa9980;margin:0;}</style></head>
                         except RuntimeError as e:
                             err_msg = str(e)
                             self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
-                    import threading; threading.Thread(target=_do, daemon=True).start()
+                    threading.Thread(target=_do, daemon=True).start()
                 gold_btn(row, "Join", _join, w=80, h=30).pack(side="right", padx=8, pady=4)
-        import threading; threading.Thread(target=_load, daemon=True).start()
+        threading.Thread(target=_load, daemon=True).start()
 
     def _set_win_icon(self, win):
         """Apply OMT icon to CTkToplevel — must use after(250) to override CTk default icon."""
@@ -4774,6 +4904,11 @@ h2{color:#c8952a;margin:0 0 8px;}p{color:#aa9980;margin:0;}</style></head>
                         win.iconphoto(True, self._main_icon_ph)
                 except: pass
         win.after(250, _apply)
+        # Restaurer l icone principale quand ce toplevel se ferme
+        def _on_destroy(e=None):
+            if hasattr(self, "_reapply_main_icon"):
+                self.after(150, self._reapply_main_icon)
+        win.bind("<Destroy>", _on_destroy)
 
 
 
@@ -4815,6 +4950,14 @@ h2{color:#c8952a;margin:0 0 8px;}p{color:#aa9980;margin:0;}</style></head>
             if sec.get("intro"): para(p,sec["intro"],DIM2)
             if sec.get("type") in ("bullets","mixed"): bul(p,sec.get("items",[]))
             if sec.get("outro"): para(p,sec["outro"],DIM2)
+
+        # Pro Tips
+        p_tips = gold_panel("Pro Tips", "💡")
+        bul(p_tips, [
+            "Add your survival script at the end of the START script using sysmsg",
+            "Add your resupply script at the end of the END script",
+        ])
+        ctk.CTkFrame(p_tips, height=6, fg_color="transparent").pack()
 
         try: START_CONTENT=(SCRIPTS_DIR/"OMT_START.razor").read_text(encoding="utf-8")
         except: START_CONTENT="(Script file not found: OMT_START.razor)"
