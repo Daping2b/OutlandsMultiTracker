@@ -109,5 +109,42 @@
       "type": "unknown",
       "label": "Crafting Exceptional Chance"
     }
+  },
+  "2026-07-18": {
+    "Aegis Keep": {
+      "value": "",
+      "type": "sanctuary",
+      "label": "Sanctuary Dungeon"
+    },
+    "Ossuary": {
+      "value": "",
+      "type": "challenger",
+      "label": "Challenger Dungeon"
+    },
+    "Pulma": {
+      "value": "+25%",
+      "type": "respawn",
+      "label": "Faster Respawn"
+    },
+    "Kraul Hive": {
+      "value": "+15%",
+      "type": "gold_loot",
+      "label": "Gold Loot"
+    },
+    "Shadowspire Cathedral": {
+      "value": "+20%",
+      "type": "experience",
+      "label": "Experience Gain"
+    },
+    "Horseshoe Bay": {
+      "value": "+10%",
+      "type": "vendor",
+      "label": "Vendor Rebate"
+    },
+    "Prevalia": {
+      "value": "+15%",
+      "type": "unknown",
+      "label": "Crafting Exceptional Chance"
+    }
   }
 }
