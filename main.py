@@ -1255,39 +1255,24 @@ class App(ctk.CTk):
         self.configure(fg_color=BG)
         self.title(f"{APP_NAME}  v{APP_VERSION}")
 
-        # Window icon — use high quality 128x128 version
-        ico_path = str(ASSETS_DIR / "O-MTSmall.ico")
-        try:
-            self.iconbitmap(ico_path)
-            self._main_icon_path = ico_path
-            # Re-apply after window is fully drawn
-            self.after(500, lambda: self.iconbitmap(ico_path))
-        except Exception:
-            ico_pil = load_pil("O-MTSmall_128x128.png", (64,64), transparent=True)
-            if ico_pil:
-                ph = ImageTk.PhotoImage(ico_pil)
-                self._keep(ph)
-                self._main_icon_ph = ph  # persist reference
-                self.iconphoto(True, ph)
-                self.after(500, lambda: self.iconphoto(True, ph))
+        # Icone OMT -- wm_iconbitmap periodique pour empecher CTk de la remplacer
+        _ico_path = str(ASSETS_DIR / "O-MTSmall.ico")
+        self._main_icon_path = _ico_path
 
-        # Reappliquer l icone OMT quand la fenetre recupere le focus
-        # CTk remplace l icone par sa plume quand un CTkToplevel s ouvre
+        def _force_icon():
+            if not self.winfo_exists(): return
+            try: self.wm_iconbitmap(_ico_path)
+            except Exception: pass
+            self.after(2000, _force_icon)
+
         def _reapply_main_icon(event=None):
             if not self.winfo_exists(): return
-            # Ne rien faire si l icone n est pas encore initialisee
-            if not hasattr(self, "_main_icon_path") and not hasattr(self, "_main_icon_ph"): return
-            try:
-                if hasattr(self, "_main_icon_path"):
-                    self.iconbitmap(self._main_icon_path)
-                elif hasattr(self, "_main_icon_ph"):
-                    self.iconphoto(True, self._main_icon_ph)
-            except Exception:
-                pass
+            try: self.wm_iconbitmap(_ico_path)
+            except Exception: pass
+
         self._reapply_main_icon = _reapply_main_icon
         self.bind("<FocusIn>", _reapply_main_icon)
-        # <Map> retire - se declenche trop tot au demarrage avant init icone
-        self.after(1500, _reapply_main_icon)
+        self.after(300, _force_icon)
 
         # ── Nav bar (black background to match O-MTMedium) ────────────────────
         nav=ctk.CTkFrame(self, fg_color=NAV_BG, height=60, corner_radius=0)
@@ -1759,7 +1744,7 @@ class App(ctk.CTk):
     COL_GAP = 4
     COLS=[
         ("",         "",           None,                               40),
-        ("player",   "Player",     "woodenshield.png",                100),
+        ("player",   "Character",  "woodenshield.png",                100),
         ("type",     "Type",       "tinkering_globe.png",             155),
         ("date",     "Date",       "carpentrycraftingmanual.png",     105),
         ("dur",      "Dur.",       "tinkering_clock.png",              68),
@@ -4352,14 +4337,34 @@ class App(ctk.CTk):
             scroll.pack(fill="both", expand=True, padx=8, pady=4)
 
             # Column headers
-            hrow = ctk.CTkFrame(scroll, fg_color=BG3, corner_radius=4)
+            # Definition des colonnes (partagee header + lignes)
+            GCOLS = [
+                ("player",  "Player",    "gupload.png",             100),
+                ("char",    "Character", "woodenshield.png",          90),
+                ("type",    "Type",      "storageshelf.png",         120),
+                ("date",    "Date",      "carpentrycraftingmanual.png", 80),
+                ("dur",     "Dur",       "tinkering_clock.png",       50),
+                ("gold",    "Gold",      "goldpile.png",              90),
+                ("doub",    "Doublons",  "doubloons1.png",            90),
+                ("rare",    "Rare",      "arcanescroll1.png",         70),
+                ("bonus",   "Bonus",     "bonus_experience.png",      80),
+                ("harvest", "Harvest",   "hatchetiron1.png",          80),
+                ("xp",      "XP",        "chromaticcore1.png",        80),
+            ]
+            GAP = 4
+            hrow = ctk.CTkFrame(scroll, fg_color=BG3, height=26, corner_radius=4)
             hrow.pack(fill="x", pady=(0,2))
-            for col, w in [("Player",100),("Character",90),("Type",120),
-                           ("Date",90),("Dur",60),("Gold",90),
-                           ("Doublons",90),("Rare",70),("Bonus",80),
-                           ("Harvest",80),("XP",80),("",40)]:
-                ctk.CTkLabel(hrow, text=col, width=w, font=F_SMALL,
-                             text_color=GOLD, justify="center").pack(side="left", padx=2)
+            # Spacer pour Player (pas de tri, juste label)
+            for key, lbl, ico_file, w in GCOLS:
+                hcell = ctk.CTkFrame(hrow, fg_color="transparent", width=w, height=26)
+                hcell.pack(side="left", padx=(GAP,0)); hcell.pack_propagate(False)
+                inner = ctk.CTkFrame(hcell, fg_color="transparent")
+                inner.place(relx=0.5, rely=0.5, anchor="center")
+                if ico_file:
+                    ico_ph = icon(ico_file, (14,14))
+                    if ico_ph:
+                        ctk.CTkLabel(inner, image=ico_ph, text="", fg_color="transparent").pack(side="left", padx=(0,2))
+                ctk.CTkLabel(inner, text=lbl, font=F_SMALL, text_color=GOLD).pack(side="left")
 
             is_lo = is_leader_or_officer = False
             memberships = getattr(self, "_guild_me", {}).get("memberships", [])
@@ -4424,79 +4429,103 @@ class App(ctk.CTk):
         from datetime import datetime
         data  = s.get("data", {})
         bg    = ROW_A if idx % 2 == 0 else ROW_B
-        row   = ctk.CTkFrame(parent, fg_color=bg, corner_radius=3)
-        row.pack(fill="x", pady=1)
+        outer = ctk.CTkFrame(parent, fg_color=BG, corner_radius=0)
+        outer.pack(fill="x", pady=1)
+        row   = ctk.CTkFrame(outer, fg_color=bg, corner_radius=3)
+        row.pack(fill="x")
 
-        # Compute values
-        def _gold(d):
-            return sum(q for c,items in d.get("loots",{}).items()
-                       if c=="Gold & Currency"
-                       for n,q in items.items() if "gold" in n.lower())
-        def _doub(d):
-            return sum(q for c,items in d.get("loots",{}).items()
-                       if c=="Gold & Currency"
-                       for n,q in items.items() if "doubloon" in n.lower())
-        def _rare(d):
-            return sum(len(items) for c,items in d.get("loots",{}).items()
-                       if c not in ("Gold & Currency","Harvesting"))
-        def _harv(d):
-            return sum(q for c,items in d.get("loots",{}).items()
-                       if c=="Harvesting" for _,q in items.items())
+        def _gold(d): return sum(q for c,items in d.get("loots",{}).items() if c=="Gold & Currency" for n,q in items.items() if "gold" in n.lower())
+        def _doub(d): return sum(q for c,items in d.get("loots",{}).items() if c=="Gold & Currency" for n,q in items.items() if "doubloon" in n.lower())
+        def _rare(d): return sum(len(items) for c,items in d.get("loots",{}).items() if c not in ("Gold & Currency","Harvesting"))
+        def _harv(d): return sum(q for c,items in d.get("loots",{}).items() if c=="Harvesting" for _,q in items.items())
         def _exp(d):  return sum(d.get("aspects_gained",{}).values())
         def _mins(d):
             try:
-                s2 = datetime.fromisoformat(d.get("start",""))
-                e2 = datetime.fromisoformat(d.get("end",""))
-                return max(1, (e2-s2).total_seconds()/60)
+                s2=datetime.fromisoformat(d.get("start","")); e2=datetime.fromisoformat(d.get("end",""))
+                return max(1,(e2-s2).total_seconds()/60)
             except: return 1
 
-        mins   = _mins(data)
-        gold   = _gold(data); doub = _doub(data)
-        rare   = _rare(data); harv = _harv(data); exp = _exp(data)
-        dt_str = data.get("start","")[:10] if data.get("start") else "—"
-        char   = data.get("player","?")
-        stype  = data.get("type","—")
-        dur    = f"{int(mins)}m"
-
+        mins  = _mins(data)
+        gold  = _gold(data); doub=_doub(data); rare=_rare(data); harv=_harv(data); exp=_exp(data)
+        dt_str= data.get("start","")[:10] if data.get("start") else "—"
+        char  = data.get("player","?")
+        stype = data.get("type","—")
+        dur   = f"{int(mins)}m"
         def _r(v): return f"{v/max(1,mins)*60:,.0f}/h"
 
-        # Player name — clickable
-        player_btn = ctk.CTkButton(row, text=s.get("username","?"),
-                                    width=100, height=26, anchor="w",
-                                    fg_color="transparent", text_color=GOLD_LT,
-                                    hover_color=BG4, font=F_SMALL,
-                                    command=on_click_player)
-        player_btn.pack(side="left", padx=2)
+        # Expand button (right first so always visible)
+        detail = ctk.CTkFrame(outer, fg_color=BG2, corner_radius=0)
+        state  = [False]
+        eb = ctk.CTkButton(row, text="▶", width=28, height=26,
+                           fg_color="transparent", text_color=DIM2, hover_color=BG4, font=F_BODY)
+        eb.pack(side="right", padx=4)
+        def _toggle(df=detail, st=state, btn=eb, d=data):
+            if st[0]:
+                df.pack_forget(); btn.configure(text="▶"); st[0]=False
+            else:
+                df.pack(fill="x", pady=(1,0)); btn.configure(text="▼"); st[0]=True
+                if not df.winfo_children(): self._populate_detail(df, d)
+        eb.configure(command=_toggle)
 
-        for text, w in [
-            (char[:12],  90), (stype[:16], 120), (dt_str, 90), (dur, 60),
-            (f"{gold:,}\n({_r(gold)})", 90),
-            (f"{doub:,}\n({_r(doub)})", 90),
-            (f"{rare}", 70), ("—", 80),
-            (f"{harv:,}", 80),
-            (f"{exp:,.0f}", 80),
-        ]:
-            ctk.CTkLabel(row, text=text, width=w, font=F_SMALL,
-                         text_color=TEXT, justify="center").pack(side="left", padx=2)
-
-        # Delete button for leaders/officers
+        # Delete button
         if can_delete:
             def _del(sid=s["id"]):
-                if not messagebox.askyesno("Delete", "Delete this session?"): return
+                if not messagebox.askyesno("Delete","Delete this session?"): return
                 def _do():
                     try:
-                        self._guild_api("DELETE", f"/guild/{guild_id}/sessions/{sid}",
-                                        params={"token": self._guild_session_token})
-                        self.after(0, lambda: self._guild_show_sessions(guild_id))
+                        self._guild_api("DELETE",f"/guild/{guild_id}/sessions/{sid}",params={"token":self._guild_session_token})
+                        self.after(0,lambda:self._guild_show_sessions(guild_id))
                     except RuntimeError as e:
-                        err_msg = str(e)
-                        self.after(0, lambda msg=err_msg: messagebox.showerror("Error", msg))
-                threading.Thread(target=_do, daemon=True).start()
-            ctk.CTkButton(row, text="🗑", width=36, height=26,
-                          fg_color="transparent", text_color=RED,
-                          hover_color=BG4, font=F_SMALL,
-                          command=_del).pack(side="right", padx=2)
+                        err=str(e); self.after(0,lambda m=err:messagebox.showerror("Error",m))
+                threading.Thread(target=_do,daemon=True).start()
+            ctk.CTkButton(row,text="🗑",width=28,height=26,
+                          fg_color="transparent",text_color=RED,hover_color=BG4,font=F_SMALL,
+                          command=_del).pack(side="right",padx=2)
 
+        # Colonnes de donnees -- integrees dans la boucle, memes largeurs que GCOLS
+        _GAP = 4
+        _gcols = [
+            ("player",  "gupload.png",              100),
+            ("char",    "woodenshield.png",           90),
+            ("type",    "storageshelf.png",          120),
+            ("date",    "carpentrycraftingmanual.png", 80),
+            ("dur",     "tinkering_clock.png",        50),
+            ("gold",    "goldpile.png",               90),
+            ("doub",    "doubloons1.png",             90),
+            ("rare",    "arcanescroll1.png",          70),
+            ("bonus",   "bonus_experience.png",       80),
+            ("harvest", "hatchetiron1.png",           80),
+            ("xp",      "chromaticcore1.png",         80),
+        ]
+        _row_vals = {
+            "player":  s.get("username","?"),
+            "char":    char[:12],
+            "type":    stype[:16],
+            "date":    dt_str,
+            "dur":     dur,
+            "gold":    f"{gold:,}\n({_r(gold)})",
+            "doub":    f"{doub:,}\n({_r(doub)})",
+            "rare":    f"{rare}\n({_r(rare)})",
+            "bonus":   "\u2014",
+            "harvest": f"{harv:,}\n({_r(harv)})",
+            "xp":      f"{exp:,.0f}\n({_r(exp)})",
+        }
+        for key, ico_file, w in _gcols:
+            cell = ctk.CTkFrame(row, fg_color="transparent", width=w, height=30)
+            cell.pack(side="left", padx=(_GAP,0)); cell.pack_propagate(False)
+            inner = ctk.CTkFrame(cell, fg_color="transparent")
+            inner.place(relx=0.5, rely=0.5, anchor="center")
+            # Colonne Player : bouton cliquable
+            if key == "player":
+                ico_ph = icon(ico_file, (14,14)) if ico_file else None
+                if ico_ph:
+                    ctk.CTkLabel(inner, image=ico_ph, text="", fg_color="transparent").pack(side="left", padx=(0,2))
+                ctk.CTkButton(inner, text=_row_vals[key], fg_color="transparent",
+                              text_color=GOLD_LT, hover_color=BG4, font=F_SMALL,
+                              height=24, command=on_click_player).pack(side="left")
+            else:
+                ctk.CTkLabel(inner, text=_row_vals[key], font=F_SMALL,
+                             text_color=TEXT, justify="center").pack(side="left")
     def _guild_show_player_sessions(self, guild_id: str, user_id: str, username: str):
         """Show all sessions for a specific player — with back button."""
         self._guild_content_loading(f"  👤  {username}")

@@ -1,5 +1,47 @@
 [
   {
+    "version": "0.74.4",
+    "date": "2026-07-21",
+    "changes": [
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild Sessions — columns now display icons matching Log Analysis style"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild Sessions — clicking a player name navigates to their session history"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Log Analysis — Character column renamed from Player"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Experience — opens in Daily + All Time view by default, with Aspect Detail checkbox"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Experience — XP values are now displayed directly on each bar"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "OMT icon is now permanently enforced across all windows and taskbar"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Log Analysis — ghost sessions without a valid character name or duration are no longer displayed"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Guild Admin — saving role mappings no longer returns a server error when the list is empty"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Guild selector now appears above navigation buttons as intended"
+      }
+    ]
+  },
+  {
     "version": "0.74.3",
     "date": "2026-07-10",
     "changes": [
