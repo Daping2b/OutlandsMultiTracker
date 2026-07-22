@@ -1,5 +1,39 @@
 [
   {
+    "version": "0.75",
+    "date": "2026-07-22",
+    "changes": [
+      {
+        "type": "NEW FEATURE",
+        "text": "Navigation — buttons redesigned with a dark fantasy gothic aesthetic, replacing the standard buttons with custom illustrated panels"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Activities — header redesigned with a dark fantasy gothic style"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild Bot — server dropdown now lists Discord servers where a guild exists and you are admin"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild Bot — new Grant Admin Role button to assign Administrator permissions to the bot on the selected server"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Experience — Aspect Detail checkbox and View radio buttons now correctly preserve the All Time state when toggled"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Interface — navigation bar background color is now consistent with the rest of the application"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Navigation — spacing between logo and buttons improved for a more balanced layout"
+      }
+    ]
+  },
+  {
     "version": "0.74.4",
     "date": "2026-07-21",
     "changes": [
