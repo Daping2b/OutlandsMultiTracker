@@ -112,6 +112,7 @@ class LoadingModal(tk.Toplevel):
 # MAIN APP
 # ═══════════════════════════════════════════════════════════════════════════════
 from log_analysis   import LogMixin
+import crash_reporter
 from experience     import ExperienceMixin
 from guild_core     import GuildCoreMixin
 from guild_members  import GuildMembersMixin
@@ -913,4 +914,5 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
     # ═══════════════════════════════════════════════════════════════════════════
 if __name__=="__main__":
     app = App()
+    crash_reporter.install(app)
     app.mainloop()

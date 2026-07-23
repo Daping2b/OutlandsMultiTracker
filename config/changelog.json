@@ -1,5 +1,43 @@
 [
   {
+    "version": "0.75.1",
+    "date": "2026-07-23",
+    "changes": [
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild — navigation tree restructured into 4 sections: Guild Master, Guild Officer, Guild Member, and Personal"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild — navigation visibility now respects the guild permission system in addition to grade"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild Bot — added dropdown to select the target Discord server"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild Bot — added Grant Admin Role button to assign Administrator permissions to the bot"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Crash Reporter — automatic crash report system with user confirmation popup, sends detailed report to a configured Discord channel"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild Admin — Official Server configuration now persists across sessions"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild Admin — Feedback Channels now includes a dedicated Crash Report channel"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Experience — Aspect Detail and View options now correctly preserve the All Time state when toggled"
+      }
+    ]
+  },
+  {
     "version": "0.75",
     "date": "2026-07-22",
     "changes": [
