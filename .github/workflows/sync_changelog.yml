@@ -1,4 +1,4 @@
-name: Sync changelog to VPS
+name: Sync web assets to VPS
 
 on:
   push:
@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'config/changelog.json'
+      - 'website/index.html'
+      - 'website/style.css'
 
 jobs:
   sync:
@@ -26,3 +28,15 @@ jobs:
           scp -i ~/.ssh/omt_deploy \
               config/changelog.json \
               ubuntu@${{ secrets.VPS_HOST }}:/var/www/omt-website/changelog.json
+
+      - name: Upload index.html to VPS
+        run: |
+          scp -i ~/.ssh/omt_deploy \
+              website/index.html \
+              ubuntu@${{ secrets.VPS_HOST }}:/var/www/omt-website/index.html
+
+      - name: Upload style.css to VPS
+        run: |
+          scp -i ~/.ssh/omt_deploy \
+              website/style.css \
+              ubuntu@${{ secrets.VPS_HOST }}:/var/www/omt-website/style.css

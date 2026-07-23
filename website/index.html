@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Outlands Multi Tracker — Session, Guild &amp; XP Tracking for UO Outlands</title>
+<meta name="description" content="A free companion app for UO Outlands players: track sessions, manage your guild, and watch your XP climb — in a dark fantasy interface built for the game.">
+<link rel="icon" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+
+<nav class="nav">
+  <div class="wrap">
+    <a href="#top" class="nav-brand">
+      <img src="assets/favicon.png" alt="">
+      Outlands Multi Tracker
+    </a>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#roadmap">Roadmap</a></li>
+      <li><a href="#changelog">Changelog</a></li>
+      <li><a href="#faq">FAQ</a></li>
+      <li><a href="https://github.com/Daping2b/OutlandsMultiTracker" class="nav-cta">Download</a></li>
+    </ul>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+  </div>
+</nav>
+
+<main id="main">
+
+  <header class="hero" id="top">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="wrap">
+      <p class="hero-eyebrow">Free companion app for UO Outlands</p>
+      <picture>
+        <source srcset="assets/logo.webp" type="image/webp">
+        <img src="assets/logo.png" alt="Outlands Multi Tracker" class="hero-logo">
+      </picture>
+      <p class="hero-sub">
+        Track every farming session, manage your guild's roster, and watch your characters'
+        XP climb — inside a dark fantasy interface built to feel like the game you're playing.
+      </p>
+      <div class="hero-actions">
+        <a href="https://github.com/Daping2b/OutlandsMultiTracker/releases/latest" class="btn btn-primary">⬇ Download Latest</a>
+        <a href="#features" class="btn btn-ghost">See What It Does</a>
+      </div>
+      <div class="hero-meta">
+        <div><span id="metaVersion">v—</span>Current Version</div>
+        <div><span>Free</span>Always</div>
+        <div><span>Windows</span>Platform</div>
+      </div>
+    </div>
+  </header>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">What It Tracks</p>
+        <h2 class="section-title">Everything Your Guild Needs to Know</h2>
+        <p class="section-desc">One tool for the things you'd otherwise track in three different tabs.</p>
+      </div>
+      <div class="features-grid">
+
+        <div class="feature-card">
+          <div class="feature-icon">⏱</div>
+          <h3>Session Logging</h3>
+          <p>Log every Dungeon run, Boating trip, or Wilderness farm with gold, doubloons, rares, and bonus XP automatically tallied per session.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Log Analysis</h3>
+          <p>Filter your history by character, activity, or date range to see exactly where your time has gone — and what it earned you.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⚜</div>
+          <h3>Guild Management</h3>
+          <p>Sync your Discord server's roles straight into OMT. Leaders and officers get a real-time view of who's online and what grade they hold.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📈</div>
+          <h3>XP Tracking</h3>
+          <p>See experience gains broken down by hour, day, or month for every character on your account, charted automatically.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🎁</div>
+          <h3>Live Bonus Awareness</h3>
+          <p>Current sanctuary and challenger dungeon bonuses are pulled in automatically, so you always know where the bonus loot is.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>Auto-Updates</h3>
+          <p>OMT checks for new releases on launch and updates itself in the background — no manual downloads, ever.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📤</div>
+          <h3>Share with Your Guild</h3>
+          <p>Upload sessions to your guild's shared pool whenever you choose, or flip on auto-upload and let every new session sync the moment you log it.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🏆</div>
+          <h3>Top Sessions</h3>
+          <p>See your guild's best runs ranked by gold + doubloons per hour — browse the global Top 10 or drill into rankings by location.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>Discord Bot</h3>
+          <p>Once linked to your server, the bot keeps guild roles and grades in sync automatically in the background — with more built directly into Discord on the way.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section id="roadmap">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">What's Next</p>
+        <h2 class="section-title">Roadmap</h2>
+        <p class="section-desc">Coming soon — not yet available, but actively in the works.</p>
+      </div>
+      <div class="features-grid features-grid--2col">
+
+        <div class="feature-card">
+          <div class="feature-icon">📅</div>
+          <span class="badge-soon">In Development</span>
+          <h3>Events Management</h3>
+          <p>Plan guild raids, PvP nights, and farming sessions directly in OMT. Officers manage attendance and run Discord giveaways — members receive a private message to choose their reward, with participation optionally monetized through item-for-gold exchanges.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📜</div>
+          <span class="badge-soon">In Development</span>
+          <h3>Guild Scripts</h3>
+          <p>Guild members upload Razor scripts, macros, XML configs, and custom maps to the shared library. Everyone installs everything in one click — straight into the right UO and Razor folders. When a script is updated, you get notified and can update it instantly with a single click., no manual file hunting.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⌨</div>
+          <span class="badge-soon">Coming Soon</span>
+          <h3>Discord Bot Commands</h3>
+          <p>Query stats, session history, and guild rankings directly from Discord — no need to open the app.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔗</div>
+          <span class="badge-soon">Coming Soon</span>
+          <h3>Automatic Character Mapping</h3>
+          <p>List your characters in a dedicated guild channel, and the bot links them to your profile automatically — no manual setup required.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section id="changelog">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Patch Notes</p>
+        <h2 class="section-title">Changelog</h2>
+        <p class="section-desc">Every fix and improvement, straight from the source.</p>
+      </div>
+      <div class="changelog-list" id="changelogList">
+        <p style="text-align:center; color: var(--dim);">Loading changelog…</p>
+      </div>
+      <div class="changelog-more">
+        <button class="btn btn-ghost" id="changelogToggle" style="display:none;">Show Older Versions</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Questions</p>
+        <h2 class="section-title">Frequently Asked</h2>
+      </div>
+      <div class="faq-list" id="faqList">
+
+        <div class="faq-item">
+          <button class="faq-q"><span>Is OMT legit?</span><span class="icon">+</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Yes. Outlands Multi Tracker is a fan-made companion app, not affiliated with the UO Outlands team — but its existence has been acknowledged directly by Owyn, Outlands' co-founder. It never touches your game client or account credentials; it only reads what you log yourself and what you choose to sync via Discord.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q"><span>Is Outlands Multi Tracker free?</span><span class="icon">+</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Yes, completely. There's no premium tier, no ads, and no account required beyond linking your Discord for guild features.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q"><span>Do I need to connect Discord to use it?</span><span class="icon">+</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Only for guild features. Session logging, log analysis, and XP tracking all work offline with no login at all.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q"><span>How does guild syncing work?</span><span class="icon">+</span></button>
+          <div class="faq-a"><div class="faq-a-inner">A guild leader links their Discord server once. From there, OMT maps your server's Discord roles to in-app grades (Leader, Officer, Member, Recruit), so permissions stay in sync automatically as roles change.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q"><span>Is my data private?</span><span class="icon">+</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Your personal session history stays on your machine. Only guild-related data (memberships, grades, shared logs you choose to upload) is stored on the OMT server.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q"><span>Why does my antivirus flag the download?</span><span class="icon">+</span></button>
+          <div class="faq-a"><div class="faq-a-inner">A small number of antivirus engines — typically Avast, AVG, WithSecure, and Bkav Pro — flag PyInstaller-packaged Python apps as a generic trojan. This is a well-known false positive caused by how the packaging tool bundles the app, not anything specific to OMT, and it affects countless legitimate open-source Python tools the same way. Major engines like Windows Defender, Kaspersky, and Bitdefender do not flag it. If you're cautious, the source code is fully public on GitHub for anyone to review.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q"><span>What platforms are supported?</span><span class="icon">+</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Windows only, for now. The app is built and tested specifically for the way UO Outlands players run their client.</div></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <div class="cta-band">
+    <div class="wrap">
+      <h2>Ready to Track Your Outland?</h2>
+      <p>Download the latest release and you're tracking your first session in under a minute.</p>
+      <a href="https://github.com/Daping2b/OutlandsMultiTracker/releases/latest" class="btn btn-primary">⬇ Download Outlands Multi Tracker</a>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="https://github.com/Daping2b/OutlandsMultiTracker">GitHub</a>
+      <a href="https://github.com/Daping2b/OutlandsMultiTracker/issues">Report an Issue</a>
+      <a href="https://uooutlands.com">UO Outlands</a>
+    </div>
+    <p class="foot-since">Outlands Multi Tracker — By Daping</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // Mobile nav toggle
+  var toggle = document.getElementById('navToggle');
+  var links  = document.getElementById('navLinks');
+  toggle.addEventListener('click', function () {
+    var open = links.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', open);
+  });
+  links.querySelectorAll('a').forEach(function (a) {
+    a.addEventListener('click', function () { links.classList.remove('open'); });
+  });
+
+  // FAQ accordion
+  document.querySelectorAll('.faq-item').forEach(function (item) {
+    item.querySelector('.faq-q').addEventListener('click', function () {
+      var wasOpen = item.classList.contains('open');
+      document.querySelectorAll('.faq-item.open').forEach(function (o) { o.classList.remove('open'); });
+      if (!wasOpen) item.classList.add('open');
+    });
+  });
+
+  // Tag class helper
+  const TYPE_ORDER = ['NEW FEATURE', 'NEW ZONE', 'IMPROVEMENT', 'BUG FIX', 'SECURITY'];
+  function tagClass(type) {
+    var t = (type || '').toLowerCase().replace(/\s+/g, '-');
+    if (t === 'new-feature')                  return 'tag-new';
+    if (t === 'new-zone')                     return 'tag-new-zone';
+    if (t === 'bug-fix' || t === 'bugfix')    return 'tag-bug-fix';
+    if (t === 'security')                     return 'tag-security';
+    if (t === 'improvement')                  return 'tag-improvement';
+    return 'tag-improvement';
+  }
+  function sortChanges(changes) {
+    return changes.slice().sort(function(a, b) {
+      var ai = TYPE_ORDER.indexOf((a.type || '').toUpperCase());
+      var bi = TYPE_ORDER.indexOf((b.type || '').toUpperCase());
+      if (ai === -1) ai = TYPE_ORDER.length;
+      if (bi === -1) bi = TYPE_ORDER.length;
+      return ai - bi;
+    });
+  }
+
+  // Extract the minor version prefix: "0.69.7" -> "0.69", "0.69" -> "0.69"
+  function minorPrefix(version) {
+    var parts = (version || '').split('.');
+    return parts.slice(0, 2).join('.');
+  }
+
+  // Load changelog.json and render, grouped by minor version
+  fetch('changelog.json')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var list = document.getElementById('changelogList');
+      var toggleBtn = document.getElementById('changelogToggle');
+      list.innerHTML = '';
+
+      if (data && data.length) {
+        document.getElementById('metaVersion').textContent = 'v' + data[0].version;
+      }
+
+      // Group entries by minor version, preserving first-seen order (most recent first)
+      var groups = [];
+      var groupByKey = {};
+      data.forEach(function (entry) {
+        var key = minorPrefix(entry.version);
+        if (!groupByKey[key]) {
+          groupByKey[key] = { key: key, dates: [], changes: [] };
+          groups.push(groupByKey[key]);
+        }
+        if (entry.date) groupByKey[key].dates.push(entry.date);
+        (entry.changes || []).forEach(function (c) { groupByKey[key].changes.push(c); });
+      });
+
+      var VISIBLE = 4;
+      groups.forEach(function (group, idx) {
+        var row = document.createElement('div');
+        row.className = 'changelog-entry' + (idx >= VISIBLE ? ' changelog-collapsed' : '');
+
+        var dateLabel = '';
+        if (group.dates.length === 1) {
+          dateLabel = group.dates[0];
+        } else if (group.dates.length > 1) {
+          var sorted = group.dates.slice().sort();
+          var first = sorted[0], last = sorted[sorted.length - 1];
+          dateLabel = (first === last) ? first : (first + ' → ' + last);
+        }
+
+        var left = document.createElement('div');
+        left.innerHTML = '<div class="changelog-version">v' + group.key + '.x</div>' +
+                          (dateLabel ? '<span class="changelog-date">' + dateLabel + '</span>' : '');
+
+        var right = document.createElement('ul');
+        right.className = 'changelog-changes';
+        sortChanges(group.changes).forEach(function (c) {
+          var li = document.createElement('li');
+          li.innerHTML = '<span class="tag ' + tagClass(c.type) + '">' + (c.type || '') + '</span><span>' + c.text + '</span>';
+          right.appendChild(li);
+        });
+
+        row.appendChild(left);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+
+      if (groups.length > VISIBLE) {
+        toggleBtn.style.display = 'inline-flex';
+        toggleBtn.addEventListener('click', function () {
+          var collapsed = document.querySelectorAll('.changelog-collapsed');
+          var nowShowing = collapsed[0] && collapsed[0].style.display === 'grid';
+          collapsed.forEach(function (el) { el.style.display = nowShowing ? 'none' : 'grid'; });
+          toggleBtn.textContent = nowShowing ? 'Show Older Versions' : 'Show Fewer';
+        });
+      }
+    })
+    .catch(function () {
+      document.getElementById('changelogList').innerHTML =
+        '<p style="text-align:center; color: var(--dim);">Changelog unavailable right now — check the GitHub releases page instead.</p>';
+    });
+})();
+</script>
+
+</body>
+</html>
