@@ -25,4 +25,4 @@ jobs:
         run: |
           scp -i ~/.ssh/omt_deploy \
               config/changelog.json \
-              ubuntu@${{ secrets.VPS_HOST }}:~/omt-website/changelog.json
+              ubuntu@${{ secrets.VPS_HOST }}:/var/www/omt-website/changelog.json
