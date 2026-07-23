@@ -620,30 +620,96 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
 
     def _show_splash(self):
         """Show splash over the hidden main window while loading."""
-        self.withdraw()   # hide main window
+        self.withdraw()
         splash = tk.Toplevel(self)
         splash.overrideredirect(True)
-        splash.configure(bg="#000000")
+        splash.configure(bg="#0a0704")
         splash.attributes("-topmost", True)
+
+        GOLD    = "#c8952a"
+        GOLD_LT = "#f0c060"
+        GOLD_DK = "#4a2e05"
+        BG_S    = "#0a0704"
+        DIM_S   = "#5a4a2a"
+
         try:
             img = Image.open(str(ASSETS_DIR/"O-MTBig.png")).convert("RGBA")
             px = [(0,0,0,0) if r<25 and g<25 and b<25 else (r,g,b,a)
                   for r,g,b,a in img.getdata()]
             img.putdata(px)
             ratio = img.width/img.height
-            img = img.resize((int(300*ratio),300), Image.LANCZOS)
-            bg_img = Image.new("RGBA", img.size, (0,0,0,255))
+            img = img.resize((int(300*ratio), 300), Image.LANCZOS)
+            bg_img = Image.new("RGBA", img.size, (10,7,4,255))
             bg_img.paste(img, mask=img.split()[3])
             ph = ImageTk.PhotoImage(bg_img.convert("RGB"))
-            self._splash_photo = ph   # keep alive on self
-            sw = splash.winfo_screenwidth(); sh = splash.winfo_screenheight()
-            w,h = ph.width(), ph.height()
-            splash.geometry(f"{w}x{h}+{sw//2-w//2}+{sh//2-h//2}")
-            tk.Label(splash, image=ph, bg="#000000", bd=0).pack()
+            self._splash_photo = ph
+            logo_w = ph.width()
+            logo_h = ph.height()
         except:
-            splash.geometry("500x200")
-            tk.Label(splash, text=APP_NAME, bg="#000000", fg="#c8952a",
-                     font=("Georgia",20,"bold")).pack(expand=True)
+            ph = None
+            logo_w = 500
+            logo_h = 0
+
+        # Dimensions splash : logo + barre de progression
+        BAR_H   = 56    # hauteur de la zone barre
+        PADDING = 24
+        splash_w = max(logo_w, 500)
+        splash_h = logo_h + BAR_H + PADDING
+
+        sw = splash.winfo_screenwidth(); sh = splash.winfo_screenheight()
+        splash.geometry(f"{splash_w}x{splash_h}+{sw//2-splash_w//2}+{sh//2-splash_h//2}")
+
+        # Logo
+        if ph:
+            tk.Label(splash, image=ph, bg=BG_S, bd=0).pack()
+        else:
+            tk.Label(splash, text=APP_NAME, bg=BG_S, fg=GOLD,
+                     font=("Georgia",20,"bold")).pack(pady=20)
+
+        # Filet or séparateur
+        sep = tk.Frame(splash, bg=GOLD_DK, height=1)
+        sep.pack(fill="x", padx=40, pady=(4,0))
+
+        # Zone barre de progression
+        bar_zone = tk.Frame(splash, bg=BG_S)
+        bar_zone.pack(fill="x", padx=40, pady=(8,0))
+
+        # Label de statut
+        status_lbl = tk.Label(bar_zone, text="Initializing…",
+                              bg=BG_S, fg=DIM_S,
+                              font=("Segoe UI", 9), anchor="w")
+        status_lbl.pack(fill="x", pady=(0,4))
+
+        # Canvas barre
+        bar_canvas = tk.Canvas(bar_zone, height=8, bg=BG_S,
+                               highlightthickness=1,
+                               highlightbackground=GOLD_DK,
+                               bd=0)
+        bar_canvas.pack(fill="x")
+        bar_canvas.update()
+        bar_total_w = bar_canvas.winfo_width()
+
+        # Dessiner le fond de la barre
+        bar_canvas.create_rectangle(0, 0, bar_total_w, 8,
+                                    fill="#1a1208", outline="")
+        # Rectangle de progression (initialement vide)
+        bar_rect = bar_canvas.create_rectangle(0, 0, 0, 8,
+                                               fill=GOLD, outline="")
+        # Reflet lumineux sur le dessus de la barre
+        bar_shine = bar_canvas.create_rectangle(0, 0, 0, 3,
+                                                fill=GOLD_LT, outline="")
+
+        def _set_progress(pct, status=""):
+            """Met à jour la barre (0.0 à 1.0) et le label de statut."""
+            if not splash.winfo_exists(): return
+            w = int(bar_canvas.winfo_width() * pct)
+            bar_canvas.coords(bar_rect,  0, 0, w, 8)
+            bar_canvas.coords(bar_shine, 0, 0, w, 3)
+            if status:
+                status_lbl.configure(text=status)
+            splash.update_idletasks()
+
+        splash._set_progress = _set_progress
         splash.update()
         return splash
 
@@ -651,6 +717,8 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
     # ── Floating update panel ──────────────────────────────────────────────────
     def _build(self):
         splash = self._show_splash()
+        sp = getattr(splash, "_set_progress", lambda p, s="": None)
+        sp(0.05, "Loading interface…")
         self.geometry("1440x920"); self.minsize(1100,720)
         self.configure(fg_color=BG)
         self.title(f"{APP_NAME}  v{APP_VERSION}")
@@ -721,11 +789,34 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
 
         self._body=ctk.CTkFrame(self,fg_color=BG,corner_radius=0)
         self._body.pack(fill="both",expand=True)
+        sp(0.25, "Building home…")
         self._build_home()
+        if "Home" in self._pages:
+            self._pages["Home"].place(relx=0,rely=0,relwidth=1,relheight=1)
+        sp(0.45, "Preloading assets…")
+        self._preload_assets(splash)
+        sp(0.75, "Loading activities…")
         self._build_log()
-        # Lazy: other pages built on first visit
-        self._built_pages = {"Home", "Log Analysis"}
+        if "Log Analysis" in self._pages:
+            self._pages["Log Analysis"].place(relx=0,rely=0,relwidth=1,relheight=1)
+        sp(0.85, "Building Experience…")
+        self._build_xp()
+        if "Experience" in self._pages:
+            self._pages["Experience"].place(relx=0,rely=0,relwidth=1,relheight=1)
+        sp(0.90, "Building How To…")
+        self._build_howto()
+        if "How To" in self._pages:
+            self._pages["How To"].place(relx=0,rely=0,relwidth=1,relheight=1)
+        sp(0.95, "Building Settings…")
+        self._build_settings()
+        if "Settings" in self._pages:
+            self._pages["Settings"].place(relx=0,rely=0,relwidth=1,relheight=1)
+        sp(0.98, "Almost ready…")
+        # Pages pré-construites au démarrage (pas de délai à la première visite)
+        self._built_pages = {"Home", "Log Analysis", "Experience", "How To", "Settings"}
         self._show("Home")
+        sp(1.0,  "Ready!")
+        self.after(180, lambda: None)
         try: splash.destroy()
         except: pass
         self.deiconify()
@@ -736,6 +827,41 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
         self._char_f = "All"
         self.after(100, lambda: self._do_all_time())
         self.update()
+
+    def _preload_assets(self, splash):
+        """Pré-charge toutes les images dans _photo_cache et _nav_btn_cache."""
+        from ui_helpers import _photo_cache, _nav_btn_cache, ASSETS_DIR
+        sp = getattr(splash, "_set_progress", lambda p, s="": None)
+
+        # Liste des assets à pré-charger
+        btn_keys = ["home","log_analysis","experience","guild","how_to",
+                    "settings","feedback","summary","empty"]
+        icons    = ["nav_all","nav_boating","nav_harvesting","nav_dungeon",
+                    "nav_wilderness","skullchallenger","O-MTSmall",
+                    "activities_header","gupload","bonus_challenger"]
+
+        total = len(btn_keys)*2 + len(icons)
+        done  = 0
+
+        for key in btn_keys:
+            for suffix in ["", "_active"]:
+                p = ASSETS_DIR / f"btn_{key}{suffix}.png"
+                cache_key = str(p)
+                if cache_key not in _nav_btn_cache:
+                    try:
+                        from PIL import Image as _Img, ImageTk as _ITk
+                        img = _Img.open(cache_key).convert("RGBA").resize((130,40), _Img.LANCZOS)
+                        _nav_btn_cache[cache_key] = _ITk.PhotoImage(img)
+                    except Exception:
+                        pass
+            done += 1
+            sp(0.45 + 0.25*(done/total), f"Loading assets… ({done}/{total})")
+
+        for name in icons:
+            from ui_helpers import load_pil, make_photo
+            make_photo(name, transparent=True)
+            done += 1
+            sp(0.45 + 0.25*(done/total), f"Loading assets… ({done}/{total})")
 
     def _show(self,name):
         # Lazy build on first visit
@@ -749,17 +875,25 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
             if name in builders:
                 builders[name]()
                 self._built_pages.add(name)
+                self._pages[name].place(relx=0,rely=0,relwidth=1,relheight=1)
         elif name == "Guild" and hasattr(self, '_guild_page'):
-            # Already built — re-render to pick up new token/state
             self._guild_render()
+
+        # Overlay opaque sur _body — masque le rendu progressif le temps du lift
+        overlay = tk.Frame(self._body, bg=BG)
+        overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        overlay.lift()
+        self.update_idletasks()   # rendu complet des widgets sous l'overlay
+
+        # Mise à jour boutons nav + lever la page
         for n,f in self._pages.items():
-            f.pack_forget()
             btn=self._tb.get(n)
             if btn: btn.configure(text_color=DIM2,fg_color=BG4,border_color=BORDER)
         if name in self._pages:
-            self._pages[name].pack(fill="both",expand=True)
+            self._pages[name].lift()
         btn=self._tb.get(name)
         if btn: btn.configure(text_color=GOLD_LT,fg_color=ACCENT,border_color=GOLD_DK)
+        overlay.destroy()   # retirer l'overlay — la page apparaît d'un bloc
 
     def _first_run(self):
         messagebox.showinfo("Welcome","Please select your UO Outlands ROOT folder\n(containing the 'ClassicUO' subfolder).")
@@ -786,6 +920,7 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
     def _build_home(self):
         page=ctk.CTkFrame(self._body,fg_color=BG,corner_radius=0)
         self._pages["Home"]=page
+        page.place(relx=0,rely=0,relwidth=1,relheight=1)
         canvas,scroll,scroll_cb=make_scrollable(page,bg=BG)
 
         # Big logo — transparent background

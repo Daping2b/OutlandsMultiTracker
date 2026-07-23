@@ -1,5 +1,43 @@
 [
   {
+    "version": "0.76",
+    "date": "2026-07-23",
+    "changes": [
+      {
+        "type": "IMPROVEMENT",
+        "text": "Performance — navigation between pages is now instant, using a stack-based rendering system (lift/place) instead of full widget reconstruction"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Performance — all pages (Home, Log Analysis, Experience, How To, Settings) are pre-built during the splash screen — zero delay on first visit"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Performance — sessions and bonuses are loaded in parallel threads during the splash screen, reducing startup time"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Performance — activity tree is built once during startup with up-to-date bonus data, eliminating the double-render on Log Analysis"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Performance — all images and navigation button assets are cached globally, preventing GDI handle accumulation on Windows"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Performance — session list uses progressive rendering (first 30 rows immediately, rest in deferred batches) keeping the UI responsive"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Splash screen — added a styled gold progress bar with step-by-step status labels during startup"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Stability — fixed GDI bitmap allocation crash on Windows caused by duplicate PhotoImage handles accumulating over time"
+      }
+    ]
+  },
+  {
     "version": "0.75.1",
     "date": "2026-07-23",
     "changes": [
