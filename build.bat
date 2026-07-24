@@ -62,4 +62,3 @@ echo  Zip it as OutlandsMultiTracker.zip
 echo  Upload to GitHub Releases
 echo  ================================================
 echo.
-pause
