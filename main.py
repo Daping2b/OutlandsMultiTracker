@@ -126,7 +126,9 @@ from loading_modal  import LoadingModal as _LoadingModal
 class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
           GuildBotMixin, GuildLoginMixin, GuildAdminMixin,
           GuildSessionsMixin, GuildUploadsMixin, ctk.CTk):
-              
+
+    _GUILD_CACHE_TTL = 30   # secondes — TTL du cache guild (full, servers, notice)
+
     def __init__(self):
         super().__init__()
         self.settings  = load_json(SETTINGS_F, {"uo_root_path":""})
@@ -811,9 +813,13 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
         self._build_settings()
         if "Settings" in self._pages:
             self._pages["Settings"].place(relx=0,rely=0,relwidth=1,relheight=1)
-        sp(0.98, "Almost ready…")
+        sp(0.97, "Building Guild…")
+        self._build_guild()
+        if "Guild" in self._pages:
+            self._pages["Guild"].place(relx=0,rely=0,relwidth=1,relheight=1)
+        sp(0.99, "Almost ready…")
         # Pages pré-construites au démarrage (pas de délai à la première visite)
-        self._built_pages = {"Home", "Log Analysis", "Experience", "How To", "Settings"}
+        self._built_pages = {"Home", "Log Analysis", "Experience", "How To", "Settings", "Guild"}
         self._show("Home")
         sp(1.0,  "Ready!")
         self.after(180, lambda: None)
@@ -827,6 +833,11 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
         self._char_f = "All"
         self.after(100, lambda: self._do_all_time())
         self.update()
+        # _guild_render() après update() — mainloop active, self.after() safe
+        self._guild_render()
+        # Auto-détection des personnages en arrière-plan (5s de délai pour
+        # laisser _guild_render() terminer son /auth/me avant de faire des appels)
+        self.after(10000, lambda: self._guild_auto_detect_characters())
 
     def _preload_assets(self, splash):
         """Pré-charge toutes les images dans _photo_cache et _nav_btn_cache."""
@@ -838,7 +849,11 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
                     "settings","feedback","summary","empty"]
         icons    = ["nav_all","nav_boating","nav_harvesting","nav_dungeon",
                     "nav_wilderness","skullchallenger","O-MTSmall",
-                    "activities_header","gupload","bonus_challenger"]
+                    "activities_header","gupload","bonus_challenger",
+                    # Icônes tree guild (16×16)
+                    "tinkering_globe","tinkering_tinkertools","carpentrycraftingmanual",
+                    "storageshelf","arcanescroll1","woodenshield","chromaticcore1",
+                    "guild"]
 
         total = len(btn_keys)*2 + len(icons)
         done  = 0
@@ -876,8 +891,6 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
                 builders[name]()
                 self._built_pages.add(name)
                 self._pages[name].place(relx=0,rely=0,relwidth=1,relheight=1)
-        elif name == "Guild" and hasattr(self, '_guild_page'):
-            self._guild_render()
 
         # Overlay opaque sur _body — masque le rendu progressif le temps du lift
         overlay = tk.Frame(self._body, bg=BG)
