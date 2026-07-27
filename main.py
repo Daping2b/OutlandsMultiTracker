@@ -2,9 +2,23 @@
 Outlands Multi Tracker
 By Daping — Windows
 """
+
+import faulthandler, sys
+faulthandler.enable(file=open("crash_fault.log", "w"))
+sys.stderr = open("crash_stderr.log", "w", encoding="utf-8")
+
+# ── Fix Python 3.14 Windows — socket.getaddrinfo crash en threads concurrents ──
+import socket, threading as _thr
+_gai_lock = _thr.Lock()
+_original_getaddrinfo = socket.getaddrinfo
+def _safe_getaddrinfo(*args, **kwargs):
+    with _gai_lock:
+        return _original_getaddrinfo(*args, **kwargs)
+socket.getaddrinfo = _safe_getaddrinfo
+# ───────────────────────────────────────────────────────────────────────────────
 import threading
 import sys, json, re, csv, threading
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from pathlib import Path
 
 import tkinter as tk
@@ -126,9 +140,12 @@ from loading_modal  import LoadingModal as _LoadingModal
 class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
           GuildBotMixin, GuildLoginMixin, GuildAdminMixin,
           GuildSessionsMixin, GuildUploadsMixin, ctk.CTk):
-              
+
+    _GUILD_CACHE_TTL = 30   # secondes — TTL du cache guild (full, servers, notice)
+
     def __init__(self):
         super().__init__()
+        self.withdraw()  # Cacher immédiatement
         self.settings  = load_json(SETTINGS_F, {"uo_root_path":""})
         self.sess_db   = load_json(SESSIONS_F, {"known_files":[],"sessions":[]})
         self.xp_db     = load_json(XP_F,       {"events":[]})
@@ -223,7 +240,7 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
         """Return bonus dict for the current week. Supports both YYYY-WXX and YYYY-MM-DD key formats."""
         if not self.bonuses_db:
             return {}
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         # Try ISO week format first (legacy)
         week_key = today.strftime("%G-W%V")
         if week_key in self.bonuses_db:
@@ -620,7 +637,6 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
 
     def _show_splash(self):
         """Show splash over the hidden main window while loading."""
-        self.withdraw()
         splash = tk.Toplevel(self)
         splash.overrideredirect(True)
         splash.configure(bg="#0a0704")
@@ -754,7 +770,7 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
             ratio=med.width/med.height
             med=med.resize((int(56*ratio),56),Image.LANCZOS)
             ph=ImageTk.PhotoImage(med); self._keep(ph)
-            ctk.CTkLabel(nav,image=ph,text="",fg_color=NAV_BG).pack(side="left",padx=(10,90),pady=2)
+            tk.Label(nav,image=ph,text="",bg=NAV_BG,bd=0).pack(side="left",padx=(10,90),pady=2)
 
         self._pages={}; self._tb={}
         tab_defs = [
@@ -811,22 +827,158 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
         self._build_settings()
         if "Settings" in self._pages:
             self._pages["Settings"].place(relx=0,rely=0,relwidth=1,relheight=1)
-        sp(0.98, "Almost ready…")
-        # Pages pré-construites au démarrage (pas de délai à la première visite)
-        self._built_pages = {"Home", "Log Analysis", "Experience", "How To", "Settings"}
+        sp(0.97, "Building Guild…")
+        self._build_guild()
+        if "Guild" in self._pages:
+            self._pages["Guild"].place(relx=0,rely=0,relwidth=1,relheight=1)
+        sp(0.99, "Almost ready…")
+        self._built_pages = {"Home", "Log Analysis", "Experience", "How To", "Settings", "Guild"}
         self._show("Home")
-        sp(1.0,  "Ready!")
-        self.after(180, lambda: None)
+        sp(1.0, "Ready!")
+        # Séquence de révélation propre :
+        # 1. alpha=0 : fenêtre invisible mais active pour le layout
+        # 2. deiconify : révéler au window manager
+        # 3. update_idletasks : finaliser TOUT le layout (geometry, pack, place)
+        # 4. splash.destroy : supprimer le splash APRÈS que le layout est complet
+        # 5. update() : traiter TOUS les events restants AVANT la visibilité
+        # 6. alpha=1 : rendre visible d'un seul coup — plus aucun glitch
+        self.attributes("-alpha", 0)
+        self.deiconify()
+        self.update_idletasks()
         try: splash.destroy()
         except: pass
-        self.deiconify()
+        self.update()
+        self.attributes("-alpha", 1)
         self.lift()
         self.focus_force()
-        # Start Log Analysis on All / All Time
+        # Start Log Analysis (délai 500ms pour laisser le layout se stabiliser)
         self._act_f  = "All"
         self._char_f = "All"
-        self.after(100, lambda: self._do_all_time())
-        self.update()
+        self.after(500, lambda: self._do_all_time())
+        # _guild_render() différé — mainloop active, self.after() safe
+        self.after(600, self._guild_render)
+        # Chargement du price cache en arrière-plan
+        self._price_cache = {}
+        self.after(2000, self._load_price_cache)
+        # Auto-détection des personnages en arrière-plan (5s de délai pour
+        # laisser _guild_render() terminer son /auth/me avant de faire des appels)
+        self.after(10000, lambda: self._guild_auto_detect_characters())
+        # Resize overlay — masque le chaos de layout pendant le drag
+        self._resize_overlay = None
+        self._resize_after_id = None
+        self._last_size = (self.winfo_width(), self.winfo_height())
+        self.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event):
+        """Overlay opaque pendant le resize — retiré 150ms après le dernier event."""
+        if event.widget is not self:
+            return
+        new_size = (event.width, event.height)
+        if new_size == self._last_size:
+            return
+        self._last_size = new_size
+        if not self._resize_overlay or not self._resize_overlay.winfo_exists():
+            self._resize_overlay = tk.Frame(self._body, bg=BG)
+            self._resize_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self._resize_overlay.lift()
+        if self._resize_after_id:
+            self.after_cancel(self._resize_after_id)
+        self._resize_after_id = self.after(150, self._on_resize_done)
+
+    def _on_resize_done(self):
+        """Retirer l'overlay — le layout est stabilisé."""
+        self._resize_after_id = None
+        if self._resize_overlay and self._resize_overlay.winfo_exists():
+            self._resize_overlay.destroy()
+            self._resize_overlay = None
+
+    def _load_price_cache(self):
+        """Charge le cache des prix depuis le backend OMT en arrière-plan."""
+        import threading, urllib.request, json as _json
+        def _fetch():
+            try:
+                url = self.GUILD_API + "/prices"
+                req = urllib.request.Request(url, headers={"User-Agent": "OMT/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    data = _json.loads(r.read())
+                cache = {}
+                for item in data.get("items", []):
+                    name = item.get("item_name", "").strip().lower()
+                    if name:
+                        cache[name] = {
+                            "current_price": item.get("current_price"),
+                            "price_history": item.get("price_history") or [],
+                            "fetched_at":    item.get("fetched_at"),
+                        }
+                self._price_cache = cache
+                print(f"[PriceCache] {len(cache)} items chargés")
+                # Invalider le cache de valeurs estimées
+                self._val_cache_dict = {}
+                # Rafraîchir les sessions affichées
+                self.after(0, lambda: self._refresh_if_visible())
+                # Lookup automatique des items sans prix
+                self.after(0, lambda: self._lookup_missing_prices())
+            except Exception as e:
+                print(f"[PriceCache] Erreur: {e}")
+        # Rafraîchir toutes les heures
+        self.after(3_600_000, self._load_price_cache)
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _refresh_if_visible(self):
+        """Rafraîchit la vue Log Analysis si elle est active."""
+        try:
+            if hasattr(self, "_pages") and self._pages.get("Log Analysis"):
+                self._do_all_time()
+        except Exception:
+            pass
+
+    def _lookup_missing_prices(self):
+        """Envoie au backend les items des sessions qui n'ont pas de prix connu.
+        Exclut les unidentified items et les items déjà tentés.
+        """
+        import threading, urllib.request, json as _json
+        from ui_helpers import _clean_item_name
+        if not self._price_cache:
+            return
+        # Set persistant entre reloads — évite de retenter les items qui échouent toujours
+        if not hasattr(self, "_price_lookup_attempted"):
+            self._price_lookup_attempted = set()
+        unknown = set()
+        for s in getattr(self, "sessions", []):
+            for cat, loots in s.get("loots", {}).items():
+                if cat in ("Gold & Currency", "Unidentified Items"):
+                    continue
+                for item_name in loots:
+                    clean = _clean_item_name(item_name).strip().lower()
+                    if not clean:
+                        continue
+                    if clean.startswith("unidentified"):
+                        continue
+                    if clean in self._price_cache:
+                        continue
+                    if clean in self._price_lookup_attempted:
+                        continue
+                    unknown.add(clean)
+        if not unknown:
+            return
+        self._price_lookup_attempted.update(unknown)
+        print(f"[PriceCache] {len(unknown)} items sans prix -> lookup")
+        def _post():
+            try:
+                url  = self.GUILD_API + "/prices/queue"
+                body = _json.dumps({"names": list(unknown)}).encode()
+                req  = urllib.request.Request(url, data=body,
+                                              headers={"Content-Type": "application/json",
+                                                       "User-Agent": "OMT/1.0"},
+                                              method="POST")
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    result = _json.loads(r.read())
+                queued = result.get("queued", 0)
+                if queued > 0:
+                    print(f"[PriceCache] {queued} items ajoutés à la file de lookup")
+            except Exception as e:
+                print(f"[PriceCache] Erreur lookup: {e}")
+        threading.Thread(target=_post, daemon=True).start()
 
     def _preload_assets(self, splash):
         """Pré-charge toutes les images dans _photo_cache et _nav_btn_cache."""
@@ -838,7 +990,11 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
                     "settings","feedback","summary","empty"]
         icons    = ["nav_all","nav_boating","nav_harvesting","nav_dungeon",
                     "nav_wilderness","skullchallenger","O-MTSmall",
-                    "activities_header","gupload","bonus_challenger"]
+                    "activities_header","gupload","bonus_challenger",
+                    # Icônes tree guild (16×16)
+                    "tinkering_globe","tinkering_tinkertools","carpentrycraftingmanual",
+                    "storageshelf","arcanescroll1","woodenshield","chromaticcore1",
+                    "guild"]
 
         total = len(btn_keys)*2 + len(icons)
         done  = 0
@@ -875,25 +1031,28 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
             if name in builders:
                 builders[name]()
                 self._built_pages.add(name)
-                self._pages[name].place(relx=0,rely=0,relwidth=1,relheight=1)
-        elif name == "Guild" and hasattr(self, '_guild_page'):
-            self._guild_render()
 
-        # Overlay opaque sur _body — masque le rendu progressif le temps du lift
+        # Seule la page active est placée — les autres sont retirées du layout
+        # → le resize ne recalcule qu'1 page au lieu de 6
+        for n, f in self._pages.items():
+            if n == name:
+                f.place(relx=0, rely=0, relwidth=1, relheight=1)
+            else:
+                f.place_forget()
+
+        # Overlay opaque sur _body — masque le rendu progressif
         overlay = tk.Frame(self._body, bg=BG)
         overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         overlay.lift()
-        self.update_idletasks()   # rendu complet des widgets sous l'overlay
+        self.update_idletasks()
 
-        # Mise à jour boutons nav + lever la page
+        # Mise à jour boutons nav
         for n,f in self._pages.items():
             btn=self._tb.get(n)
             if btn: btn.configure(text_color=DIM2,fg_color=BG4,border_color=BORDER)
-        if name in self._pages:
-            self._pages[name].lift()
         btn=self._tb.get(name)
         if btn: btn.configure(text_color=GOLD_LT,fg_color=ACCENT,border_color=GOLD_DK)
-        overlay.destroy()   # retirer l'overlay — la page apparaît d'un bloc
+        overlay.destroy()
 
     def _first_run(self):
         messagebox.showinfo("Welcome","Please select your UO Outlands ROOT folder\n(containing the 'ClassicUO' subfolder).")
@@ -929,7 +1088,7 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
             ratio=big.width/big.height
             big=big.resize((int(330*ratio),330),Image.LANCZOS)
             ph=ImageTk.PhotoImage(big); self._keep(ph)
-            lbl=ctk.CTkLabel(scroll,image=ph,text="",fg_color=BG); lbl.pack(pady=(20,6))
+            lbl=tk.Label(scroll,image=ph,text="",bg=BG,bd=0); lbl.pack(pady=(20,6))
         else:
             ctk.CTkLabel(scroll,text=APP_NAME,font=("Palatino Linotype",28,"bold"),text_color=GOLD_LT).pack(pady=(20,6))
 
@@ -955,9 +1114,8 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
 
         # Changelog panel — 50% bigger, centered at ~800px
         center=ctk.CTkFrame(scroll,fg_color="transparent"); center.pack(fill="x",padx=60,pady=8)
-        wrap=ctk.CTkFrame(center,fg_color=BORDER,corner_radius=6); wrap.pack(fill="x")
-        news=ctk.CTkFrame(wrap,fg_color=BG3,corner_radius=5)
-        news.pack(fill="both",expand=True,padx=1,pady=1)
+        news=ctk.CTkFrame(center,fg_color=BG3,corner_radius=6,
+                          border_width=1,border_color=BORDER); news.pack(fill="x")
 
         ctk.CTkLabel(news,text="  ✦  Patch Notes & Updates  ✦",
                      font=("Georgia",17,"bold"),text_color=GOLD_LT,anchor="w").pack(fill="x",padx=16,pady=(14,4))
@@ -987,11 +1145,10 @@ class App(LogMixin, ExperienceMixin, GuildCoreMixin, GuildMembersMixin,
             for g_idx, (major, entries) in enumerate(groups.items()):
                 is_latest = (g_idx == 0)
                 # Each major version = its own bordered panel
-                panel_border = ctk.CTkFrame(news, fg_color=GOLD_DK if is_latest else BORDER,
-                                            corner_radius=6)
-                panel_border.pack(fill="x", padx=16, pady=(10,4))
-                panel = ctk.CTkFrame(panel_border, fg_color=BG4, corner_radius=5)
-                panel.pack(fill="both", expand=True, padx=1, pady=1)
+                panel = ctk.CTkFrame(news, fg_color=BG4, corner_radius=6,
+                                      border_width=1,
+                                      border_color=GOLD_DK if is_latest else BORDER)
+                panel.pack(fill="x", padx=16, pady=(10,4))
 
                 # Panel header
                 hdr = ctk.CTkFrame(panel, fg_color=BG3, corner_radius=0, height=32)

@@ -455,7 +455,7 @@ def do_broadcast_patchnote(new_ver_str, dry, total):
     # Séparateur + bouton téléchargement
     fields.append({
         "name": "\u200b",
-        "value": f"[📥 Télécharger]({OMT_SITE_URL})  •  [🌐 Site web]({OMT_SITE_URL})",
+        "value": f"[📥 Download]({OMT_SITE_URL})  •  [🌐 Website]({OMT_SITE_URL})",
         "inline": False
     })
 

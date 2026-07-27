@@ -1,5 +1,125 @@
 [
   {
+    "version": "0.78",
+    "date": "2026-07-27",
+    "changes": [
+      {
+        "type": "NEW FEATURE",
+        "text": "Price estimation system — Guild Sessions now display Items Est. and Total Est. columns with estimated gold values for each session"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Price detail popups — click the info button on any session to see a full breakdown by item category with doubloon conversion"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed critical crash (access violation) when switching between panel tabs on Python 3.14 / Windows"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Panel tab system rewritten with zero-destroy architecture — switching tabs no longer creates or destroys widgets, eliminating all crash scenarios"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed crash caused by hover callbacks firing on destroyed navigation buttons"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Official Server configuration now loads asynchronously — no more UI freeze while detecting Discord servers"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed HiDPI display warnings on image labels in Guild Sessions and Log Analysis"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Startup sequence optimized — layout fully computed before window appears, eliminating the visual glitch"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Resize performance improved — only the active page is rendered during window resize"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed Patch Notes panel border rendering issue on resize"
+      }
+    ]
+  },
+  {
+    "version": "0.77",
+    "date": "2026-07-24",
+    "changes": [
+      {
+        "type": "NEW FEATURE",
+        "text": "Automatic character detection system — new characters are identified and submitted for validation in My Characters"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Pending character validation system — detected characters can be confirmed or rejected by authorized members"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "Guild navigation tree completely redesigned with color-coded sections, icons and accent bars"
+      },
+      {
+        "type": "NEW FEATURE",
+        "text": "New release patchnotes now automatically broadcast to all Official Notice channels"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild pages now load instantly on revisit — no more reload on every click"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "All guild data is now cached across the application — 30 second TTL"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Bot page restructured with dedicated Bot Status and Communication sections"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Official Notice save button added with inline feedback"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Account labels now display with consistent Account Main / Account Secondaire naming"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Coming Soon pages added for Events and Scripts sections"
+      },
+      {
+        "type": "IMPROVEMENT",
+        "text": "Guild is now pre-built during the splash screen for faster first access"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed Official Notice channel not updating when switching Discord servers"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed bot page taking too long to load"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed characters not displaying after navigation"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed guild login redirect after Discord OAuth"
+      },
+      {
+        "type": "BUG FIX",
+        "text": "Fixed guild tree navigation buttons not responding to clicks"
+      },
+      {
+        "type": "SECURITY",
+        "text": "Official Notice channel uniqueness enforced at database level — same channel can no longer be assigned to two guilds simultaneously"
+      }
+    ]
+  },
+  {
     "version": "0.76",
     "date": "2026-07-23",
     "changes": [
