@@ -183,5 +183,42 @@
       "type": "unknown",
       "label": "Crafting Exceptional Chance"
     }
+  },
+  "2026-08-01": {
+    "Shadowspire Cathedral": {
+      "value": "",
+      "type": "sanctuary",
+      "label": "Sanctuary Dungeon"
+    },
+    "Nusero": {
+      "value": "",
+      "type": "challenger",
+      "label": "Challenger Dungeon"
+    },
+    "Inferno": {
+      "value": "+25%",
+      "type": "respawn",
+      "label": "Faster Respawn"
+    },
+    "Aegis Keep": {
+      "value": "+15%",
+      "type": "gold_loot",
+      "label": "Gold Loot"
+    },
+    "Cavernam": {
+      "value": "+20%",
+      "type": "experience",
+      "label": "Experience Gain"
+    },
+    "Terran": {
+      "value": "+10%",
+      "type": "vendor",
+      "label": "Vendor Rebate"
+    },
+    "Anchor's Rest": {
+      "value": "+15%",
+      "type": "unknown",
+      "label": "Crafting Exceptional Chance"
+    }
   }
 }
