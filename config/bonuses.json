@@ -479,5 +479,42 @@
       "type": "unknown",
       "label": "Crafting Exceptional Chance"
     }
+  },
+  "2026-09-26": {
+    "Kraul Hive": {
+      "value": "",
+      "type": "sanctuary",
+      "label": "Sanctuary Dungeon"
+    },
+    "Pulma": {
+      "value": "",
+      "type": "challenger",
+      "label": "Challenger Dungeon"
+    },
+    "Shadowspire Cathedral": {
+      "value": "+25%",
+      "type": "respawn",
+      "label": "Faster Respawn"
+    },
+    "Nusero": {
+      "value": "+15%",
+      "type": "gold_loot",
+      "label": "Gold Loot"
+    },
+    "Aegis Keep": {
+      "value": "+20%",
+      "type": "experience",
+      "label": "Experience Gain"
+    },
+    "Cambria": {
+      "value": "+10%",
+      "type": "vendor",
+      "label": "Vendor Rebate"
+    },
+    "Anchor's Rest": {
+      "value": "+15%",
+      "type": "unknown",
+      "label": "Crafting Exceptional Chance"
+    }
   }
 }
