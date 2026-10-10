@@ -553,5 +553,42 @@
       "type": "unknown",
       "label": "Crafting Exceptional Chance"
     }
+  },
+  "2026-10-10": {
+    "Cavernam": {
+      "value": "",
+      "type": "sanctuary",
+      "label": "Sanctuary Dungeon"
+    },
+    "Aegis Keep": {
+      "value": "",
+      "type": "challenger",
+      "label": "Challenger Dungeon"
+    },
+    "Wilderness": {
+      "value": "+25%",
+      "type": "respawn",
+      "label": "Faster Respawn"
+    },
+    "Tidal Tomb": {
+      "value": "+15%",
+      "type": "gold_loot",
+      "label": "Gold Loot"
+    },
+    "Ocean": {
+      "value": "+20%",
+      "type": "experience",
+      "label": "Experience Gain"
+    },
+    "Terran": {
+      "value": "+10%",
+      "type": "vendor",
+      "label": "Vendor Rebate"
+    },
+    "Andaria": {
+      "value": "+15%",
+      "type": "unknown",
+      "label": "Crafting Exceptional Chance"
+    }
   }
 }
