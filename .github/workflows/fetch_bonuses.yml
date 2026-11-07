@@ -37,8 +37,10 @@ jobs:
           # La cle publique du site change quand son proprietaire la fait tourner (ex. 2026-10-21) :
           # on la relit a chaque execution dans la configuration publique de la page d'accueil.
           try:
-              page = requests.get(SITE, headers={"User-Agent": UA}, timeout=20)
-              page.raise_for_status()
+              page = requests.get(SITE, headers={"User-Agent": UA, "Accept": "text/html,application/xhtml+xml",
+                                                 "Accept-Language": "en-US,en;q=0.9"}, timeout=20)
+              if page.status_code != 200:
+                  print(f"KEY_EXTRACTION_FAILED: la page renvoie le code {page.status_code} ({page.headers.get('server','?')}) : {page.text[:200]!r}"); sys.exit(1)
               m = re.search(r'supabase:\{url:"([^"]+)",key:"([^"]+)"', page.text)
           except Exception as e:
               print(f"KEY_EXTRACTION_FAILED: page inaccessible ({type(e).__name__})"); sys.exit(1)
